@@ -1,6 +1,6 @@
 # Convoy
 
-Convex-style DX on PostgreSQL. Typed schema, typed queries/mutations, and a tiny runtime that keeps your app code clean. Convoy is not an ORM or a replacement for Drizzle/Prisma; it focuses on typed contracts, JSONB-first storage, and a clean client/server boundary.
+Convex-style DX, sync, and schemaless speed — built on PostgreSQL so you own your data. Start fast with JSONB, ship quickly, and when the product hardens you can migrate hot paths into relational tables without rewriting your app.
 
 Status: **0.0.1-alpha** (early, fast-moving, APIs will change)
 
@@ -9,7 +9,7 @@ Status: **0.0.1-alpha** (early, fast-moving, APIs will change)
 - Postgres as the source of truth (self-hostable, future-safe)
 - JSONB-first schema for fast iteration
 - End-to-end TypeScript types from server to client
-- Convex-style `query()` / `mutation()` API (no SQL in client code)
+- `query()` / `mutation()` API (no SQL in client code)
 
 ## Install
 
