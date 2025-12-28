@@ -1,0 +1,42 @@
+{
+  "name": "convoy",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "workspaces": [
+    "playground"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./src/client.ts"
+    },
+    "./react": {
+      "types": "./src/react.ts",
+      "default": "./src/react.ts"
+    }
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "convoy:dev": "bun run scripts/convoy-dev.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "pg": "^8.16.3",
+    "react": "^19.1.1",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.1.13",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4"
+  }
+}
