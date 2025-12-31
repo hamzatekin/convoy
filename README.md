@@ -1,6 +1,8 @@
 # Convoy
 
-Convex-style DX, sync, and schemaless speed — built on PostgreSQL so you own your data. Start fast with JSONB, ship quickly, and when the product hardens you can migrate hot paths into relational tables without rewriting your app.
+Convex‑style DX, but Postgres‑native.
+
+Convex‑style DX, but Postgres‑native. Start fast with JSONB, ship quickly, and when the product hardens you can migrate hot paths into relational tables without rewriting your app.
 
 Status: **0.0.1-alpha** (early, fast-moving, APIs will change)
 
@@ -79,7 +81,7 @@ export const listProjects = query({
 
 ### 3) Sync and generate API bindings
 
-Run the dev command once (or on every change):
+Run the dev command (watches for changes by default, use `--once` for a single sync):
 
 ```bash
 bun run scripts/convoy-dev.ts --root .
@@ -89,6 +91,7 @@ This will:
 - create the database if needed
 - create tables + JSONB indexes
 - generate `convoy/_generated/api.ts`, `convoy/_generated/functions.ts`, and `convoy/_generated/server.ts`
+- start the local Convoy HTTP server
 
 ### 4) Use it on the client
 
@@ -116,11 +119,15 @@ await client.mutation(api.projects.createProject, { userId, name: "My App" });
 
 ## CLI
 
-Currently a single command for dev + sync:
+Currently a single command for dev + sync (also starts the local server):
 
 ```bash
 bun run scripts/convoy-dev.ts --root .
 ```
+
+Flags:
+- `--once` to run a single sync and exit
+- `--no-serve` to skip starting the server
 
 Config:
 - `DATABASE_URL` in `.env` (required)

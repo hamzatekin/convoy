@@ -22,6 +22,6 @@ export type TableDefinition<
   isValid: (value: unknown) => value is z.output<z.ZodObject<TShape>>;
 };
 
-export type InferTableRow<TTable extends TableDefinition<TableShape>> = z.infer<
-  TTable["schema"]
->;
+export type InferTableRow<
+  TTable extends TableDefinition<TableShape, any>,
+> = z.infer<TTable["schema"]>;

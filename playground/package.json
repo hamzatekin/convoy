@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "convoy:dev": "bun run ../scripts/convoy-dev.ts --root .",
+    "convoy:once": "bun run ../scripts/convoy-dev.ts --root . --once",
+    "convoy:server": "bun run convoy/_generated/http.ts",
     "typecheck": "tsc --noEmit",
     "dev": "vite",
     "build": "vite build",

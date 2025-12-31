@@ -1,4 +1,4 @@
-import type { input, ZodObject, ZodRawShape } from "zod";
+import type { input, ZodObject } from "zod";
 import type { ConvoyFunction } from "./server";
 
 type ArgsOfFunction<TFunc> =
@@ -112,7 +112,7 @@ export function createConvoyClient(
 
 export function makeQueryRef<
   Name extends string,
-  TFunc extends ConvoyFunction<any, ZodRawShape, any>,
+  TFunc,
 >(
   name: Name,
   _fn: TFunc,
@@ -126,7 +126,7 @@ export function makeQueryRef<
 
 export function makeMutationRef<
   Name extends string,
-  TFunc extends ConvoyFunction<any, ZodRawShape, any>,
+  TFunc,
 >(
   name: Name,
   _fn: TFunc,

@@ -96,8 +96,8 @@ export function createFunctionHelpers<TCtx>() {
 }
 
 type SqlRunner = {
-  execute: <TRow extends Record<string, unknown>>(query: SQL) => Promise<
-    { rows: TRow[] } | TRow[]
+  execute: (query: SQL) => Promise<
+    { rows: unknown[] } | unknown[]
   >;
 };
 
@@ -156,12 +156,10 @@ type QueryBuilder<
 };
 
 function normalizeRows<TRow extends Record<string, unknown>>(
-  result: { rows: TRow[] } | TRow[],
+  result: { rows: unknown[] } | unknown[],
 ): TRow[] {
-  if (Array.isArray(result)) {
-    return result;
-  }
-  return result.rows;
+  const rows = Array.isArray(result) ? result : result.rows;
+  return rows as TRow[];
 }
 
 function jsonField(field: string): SQL {
@@ -311,8 +309,8 @@ export function createDb<TTables extends SchemaTables>(
   }
 
   async function run<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
-    const result = await runner.execute<T>(query);
-    return normalizeRows(result);
+    const result = await runner.execute(query);
+    return normalizeRows<T>(result);
   }
 
   async function insert<TTableName extends keyof TTables>(

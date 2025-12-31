@@ -18,6 +18,10 @@
     "./react": {
       "types": "./src/react.ts",
       "default": "./src/react.ts"
+    },
+    "./node": {
+      "types": "./src/node.ts",
+      "default": "./src/node.ts"
     }
   },
   "scripts": {
@@ -35,6 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.0.3",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19.1.13",
     "typescript": "~5.9.3",
     "vite": "^7.2.4"
