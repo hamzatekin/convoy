@@ -42,6 +42,7 @@ Deliverables:
 - [Improvement] Generated `api.d.ts`, `server.d.ts`, `dataModel.d.ts` (no server code in client bundles)
 - [New] Optional TanStack Query adapter (`@convoy/react-query`)
 - [Improvement] Clear docs on typed refs + hooks
+- [New] Enforce read-only queries (no writes in queries) with runtime guard + typings
 
 Cut line:
 - No realtime invalidation yet
@@ -76,12 +77,16 @@ Cut line:
 Done when:
 - Hot fields can be promoted without breaking API types
 
-## M5 - Realtime + sync path
+## M5 - Realtime + ElectricSQL sync
 
 Deliverables:
+- [New] ElectricSQL integration plan + starter adapter
 - [New] Mutation invalidation events (LISTEN/NOTIFY or pub/sub adapter)
 - [New] Server broadcast layer
-- [New] ElectricSQL integration plan + starter adapter
+- [Improvement] Swap SSE subscriptions for WebSocket transport (mobile reliability)
+
+Notes:
+- This is the sync revenue driver; prioritize when core DX stabilizes.
 
 Cut line:
 - Offline/CRDT support not in scope

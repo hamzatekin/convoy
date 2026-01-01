@@ -53,6 +53,15 @@ input {
   font-size: 14px;
 }
 
+select {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+  background: #ffffff;
+  min-width: 160px;
+}
+
 button {
   padding: 10px 16px;
   border-radius: 999px;
@@ -82,6 +91,59 @@ button:disabled {
   padding: 12px;
   font-size: 12px;
   overflow-x: auto;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 12px;
+}
+
+.list-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: #f9fafb;
+}
+
+.list-item.active {
+  border-color: #111827;
+  background: #f3f4f6;
+}
+
+.stack {
+  display: grid;
+  gap: 6px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #111827;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.meta-row {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 12px;
 }
 
 footer.panel {

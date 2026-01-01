@@ -28,7 +28,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "convoy:dev": "bun run scripts/convoy-dev.ts"
+    "convoy:dev": "bun run scripts/convoy-dev.ts",
+    "convoy:server:debug": "CONVOY_DEBUG=1 bun run --cwd playground convoy:server",
+    "playground:dev": "bun run --cwd playground dev",
+    "playground:build": "bun run --cwd playground build",
+    "playground:preview": "bun run --cwd playground preview",
+    "playground:typecheck": "bun run --cwd playground typecheck",
+    "playground:convoy:dev": "bun run --cwd playground convoy:dev",
+    "playground:convoy:once": "bun run --cwd playground convoy:once",
+    "playground:convoy:server": "bun run --cwd playground convoy:server",
+    "playground:convoy:server:debug": "CONVOY_DEBUG=1 bun run --cwd playground convoy:server"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

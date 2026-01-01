@@ -1,13 +1,10 @@
-import type { input, ZodObject } from "zod";
-import type { ConvoyFunction } from "./server";
-
 type ArgsOfFunction<TFunc> =
-  TFunc extends ConvoyFunction<any, infer TArgs, any>
-    ? input<ZodObject<TArgs>>
+  TFunc extends { handler: (ctx: any, args: infer TArgs) => any }
+    ? TArgs
     : never;
 
 type ResultOfFunction<TFunc> =
-  TFunc extends ConvoyFunction<any, any, infer TResult>
+  TFunc extends { handler: (ctx: any, args: any) => infer TResult }
     ? Awaited<TResult>
     : never;
 
@@ -42,13 +39,20 @@ export type ConvoyClientOptions = {
   fetch?: typeof fetch;
 };
 
+function normalizeBaseUrl(baseUrl: string): string {
+  if (!baseUrl) {
+    return "";
+  }
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+}
+
 async function callApi<T>(
   kind: "query" | "mutation",
   name: string,
   args: unknown,
   options?: ConvoyClientOptions,
 ): Promise<T> {
-  const baseUrl = options?.baseUrl ?? "";
+  const baseUrl = normalizeBaseUrl(options?.baseUrl ?? "");
   const fetcher = options?.fetch ?? fetch;
   if (!fetcher) {
     throw new Error("fetch is not available");
@@ -70,6 +74,7 @@ async function callApi<T>(
 }
 
 export type ConvoyClient = {
+  baseUrl?: string;
   query: <TRef extends QueryRef<string, any, any>>(
     ref: TRef,
     args: ArgsOfRef<TRef>,
@@ -83,7 +88,9 @@ export type ConvoyClient = {
 export function createConvoyClient(
   options?: ConvoyClientOptions,
 ): ConvoyClient {
+  const baseUrl = normalizeBaseUrl(options?.baseUrl ?? "");
   return {
+    baseUrl,
     query: async <TRef extends QueryRef<string, any, any>>(
       ref: TRef,
       args: ArgsOfRef<TRef>,
