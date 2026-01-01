@@ -43,7 +43,9 @@
     "playground:convoy:once": "bun run --cwd playground convoy:once",
     "playground:convoy:server": "bun run --cwd playground convoy:server",
     "playground:convoy:server:debug": "CONVOY_DEBUG=1 bun run --cwd playground convoy:server",
-    "prepare": "husky"
+    "prepare": "husky",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

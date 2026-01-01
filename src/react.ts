@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createConvoyClient,
   type ArgsOfRef,
@@ -6,7 +6,7 @@ import {
   type MutationRef,
   type QueryRef,
   type ResultOfRef,
-} from "./client";
+} from './client';
 
 export type UseQueryOptions = {
   enabled?: boolean;
@@ -23,15 +23,13 @@ export type UseQueryResult<TRef> = {
   data: ResultOfRef<TRef> | null;
   error: Error | null;
   isLoading: boolean;
-  refetch: (
-    nextArgs?: ArgsOfRef<TRef> | null,
-  ) => Promise<ResultOfRef<TRef> | null>;
+  refetch: (nextArgs?: ArgsOfRef<TRef> | null) => Promise<ResultOfRef<TRef> | null>;
 };
 
 type InvalidationListener = () => void;
 type QuerySubscriptionMessage =
-  | { type: "result"; name: string; data: unknown; ts?: number }
-  | { type: "error"; name: string; error: string; ts?: number };
+  | { type: 'result'; name: string; data: unknown; ts?: number }
+  | { type: 'error'; name: string; error: string; ts?: number };
 
 type QuerySubscriptionListener = (message: QuerySubscriptionMessage) => void;
 type QuerySubscriptionSource = {
@@ -42,9 +40,8 @@ type QuerySubscriptionSource = {
 const querySubscriptionSources = new Map<string, QuerySubscriptionSource>();
 const localInvalidationListeners = new Set<InvalidationListener>();
 const debugEnabled =
-  (typeof window !== "undefined" &&
-    window.localStorage?.getItem("CONVOY_DEBUG") === "1") ||
-  (typeof process !== "undefined" && process.env?.CONVOY_DEBUG === "1");
+  (typeof window !== 'undefined' && window.localStorage?.getItem('CONVOY_DEBUG') === '1') ||
+  (typeof process !== 'undefined' && process.env?.CONVOY_DEBUG === '1');
 
 function debugLog(message: string, details?: unknown): void {
   if (!debugEnabled) {
@@ -59,43 +56,36 @@ function debugLog(message: string, details?: unknown): void {
 
 function joinUrl(baseUrl: string, path: string): string {
   if (!baseUrl) {
-    return path.startsWith("/") ? path : `/${path}`;
+    return path.startsWith('/') ? path : `/${path}`;
   }
-  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-  const trimmedPath = path.startsWith("/") ? path : `/${path}`;
+  const trimmedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith('/') ? path : `/${path}`;
   return `${trimmedBase}${trimmedPath}`;
 }
 
-function buildQuerySubscribeUrl(
-  subscribeUrl: string,
-  name: string,
-  args: unknown,
-): string {
-  const base =
-    typeof window !== "undefined" ? window.location.origin : "http://localhost";
+function buildQuerySubscribeUrl(subscribeUrl: string, name: string, args: unknown): string {
+  const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
   const url = new URL(subscribeUrl, base);
-  url.searchParams.set("name", name);
-  url.searchParams.set("args", JSON.stringify(args ?? null));
+  url.searchParams.set('name', name);
+  url.searchParams.set('args', JSON.stringify(args ?? null));
   return url.toString();
 }
 
 function notifyLocalInvalidation(): void {
-  debugLog("Local invalidation");
+  debugLog('Local invalidation');
   for (const listener of localInvalidationListeners) {
     listener();
   }
 }
 
-function subscribeToLocalInvalidations(
-  listener: InvalidationListener,
-): () => void {
+function subscribeToLocalInvalidations(listener: InvalidationListener): () => void {
   localInvalidationListeners.add(listener);
-  debugLog("Subscribed to local invalidations", {
+  debugLog('Subscribed to local invalidations', {
     count: localInvalidationListeners.size,
   });
   return () => {
     localInvalidationListeners.delete(listener);
-    debugLog("Unsubscribed from local invalidations", {
+    debugLog('Unsubscribed from local invalidations', {
       count: localInvalidationListeners.size,
     });
   };
@@ -104,7 +94,7 @@ function subscribeToLocalInvalidations(
 function parseQueryMessage(raw: string): QuerySubscriptionMessage | null {
   try {
     const parsed = JSON.parse(raw) as QuerySubscriptionMessage;
-    if (!parsed || typeof parsed !== "object" || !("type" in parsed)) {
+    if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) {
       return null;
     }
     return parsed;
@@ -113,34 +103,31 @@ function parseQueryMessage(raw: string): QuerySubscriptionMessage | null {
   }
 }
 
-function subscribeToQueryResults(
-  url: string,
-  listener: QuerySubscriptionListener,
-): () => void {
+function subscribeToQueryResults(url: string, listener: QuerySubscriptionListener): () => void {
   let entry = querySubscriptionSources.get(url);
   if (!entry) {
     const source = new EventSource(url);
     const listeners = new Set<QuerySubscriptionListener>();
     source.onopen = () => {
-      debugLog("SSE connected", { url });
+      debugLog('SSE connected', { url });
     };
     source.onerror = () => {
-      debugLog("SSE error", { url });
+      debugLog('SSE error', { url });
     };
     source.onmessage = (event) => {
       const message = parseQueryMessage(event.data);
       if (!message) {
-        debugLog("SSE message ignored", { url });
+        debugLog('SSE message ignored', { url });
         return;
       }
-      debugLog("SSE message", { url, type: message.type });
+      debugLog('SSE message', { url, type: message.type });
       for (const callback of listeners) {
         callback(message);
       }
     };
     entry = { source, listeners };
     querySubscriptionSources.set(url, entry);
-    debugLog("SSE subscribed", { url });
+    debugLog('SSE subscribed', { url });
   }
   entry.listeners.add(listener);
   return () => {
@@ -148,7 +135,7 @@ function subscribeToQueryResults(
     if (entry && entry.listeners.size === 0) {
       entry.source.close();
       querySubscriptionSources.delete(url);
-      debugLog("SSE unsubscribed", { url });
+      debugLog('SSE unsubscribed', { url });
     }
   };
 }
@@ -163,8 +150,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
   const client = options?.client ?? defaultClient;
   const enabled = options?.enabled ?? true;
   const subscribe = options?.subscribe ?? true;
-  const subscribeUrl =
-    options?.subscribeUrl ?? joinUrl(client.baseUrl ?? "", "/api/subscribe");
+  const subscribeUrl = options?.subscribeUrl ?? joinUrl(client.baseUrl ?? '', '/api/subscribe');
   const [data, setData] = useState<ResultOfRef<TRef> | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -186,7 +172,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       if (resolvedArgs == null) {
         return null;
       }
-      debugLog("Query refetch", { name: ref.name });
+      debugLog('Query refetch', { name: ref.name });
       setIsLoading(true);
       setError(null);
       try {
@@ -194,8 +180,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
         setData(result);
         return result;
       } catch (err) {
-        const nextError =
-          err instanceof Error ? err : new Error("Query failed");
+        const nextError = err instanceof Error ? err : new Error('Query failed');
         setError(nextError);
         return null;
       } finally {
@@ -228,8 +213,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       })
       .catch((err) => {
         if (!cancelled) {
-          const nextError =
-            err instanceof Error ? err : new Error("Query failed");
+          const nextError = err instanceof Error ? err : new Error('Query failed');
           setError(nextError);
         }
       })
@@ -253,7 +237,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
     sseActiveRef.current = false;
     const unsubscribeLocal = subscribeToLocalInvalidations(() => {
       if (sseActiveRef.current) {
-        debugLog("Local invalidation ignored (SSE active)", {
+        debugLog('Local invalidation ignored (SSE active)', {
           name: ref.name,
         });
         return;
@@ -263,21 +247,17 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       }
       void refetch();
     });
-    if (typeof EventSource !== "undefined") {
-      const url = buildQuerySubscribeUrl(
-        subscribeUrl,
-        ref.name,
-        argsRef.current,
-      );
+    if (typeof EventSource !== 'undefined') {
+      const url = buildQuerySubscribeUrl(subscribeUrl, ref.name, argsRef.current);
       const unsubscribeSse = subscribeToQueryResults(url, (message) => {
         sseActiveRef.current = true;
-        if (message.type === "result") {
+        if (message.type === 'result') {
           setData(message.data as ResultOfRef<TRef>);
           setError(null);
           setIsLoading(false);
           return;
         }
-        setError(new Error(message.error ?? "Query failed"));
+        setError(new Error(message.error ?? 'Query failed'));
         setIsLoading(false);
       });
       return () => {

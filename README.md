@@ -33,8 +33,8 @@ Create `convoy/schema.ts` in your project root:
 
 ```ts
 // src/convoy/schema.ts
-import { defineSchema, defineTable, defineRef } from "convoy";
-import { z } from "zod";
+import { defineSchema, defineTable, defineRef } from 'convoy';
+import { z } from 'zod';
 
 export const schema = defineSchema({
   users: defineTable({
@@ -43,9 +43,9 @@ export const schema = defineSchema({
   }),
   projects: defineTable({
     name: z.string(),
-    userId: defineRef("users"),
+    userId: defineRef('users'),
     createdAt: z.number(),
-  }).index("by_userId", ["userId"]),
+  }).index('by_userId', ['userId']),
 });
 ```
 
@@ -55,14 +55,14 @@ Create files under `convoy/functions`:
 
 ```ts
 // convoy/functions/projects.ts
-import { defineRef } from "convoy";
-import { mutation, query } from "../_generated/server";
-import { z } from "zod";
+import { defineRef } from 'convoy';
+import { mutation, query } from '../_generated/server';
+import { z } from 'zod';
 
 export const createProject = mutation({
-  args: { userId: defineRef("users"), name: z.string() },
+  args: { userId: defineRef('users'), name: z.string() },
   handler: async (ctx, args) => {
-    return ctx.db.insert("projects", {
+    return ctx.db.insert('projects', {
       userId: args.userId,
       name: args.name,
       createdAt: Date.now(),
@@ -71,12 +71,12 @@ export const createProject = mutation({
 });
 
 export const listProjects = query({
-  args: { userId: defineRef("users") },
+  args: { userId: defineRef('users') },
   handler: async (ctx, args) => {
     return ctx.db
-      .query("projects")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .order("desc", "createdAt")
+      .query('projects')
+      .withIndex('by_userId', (q) => q.eq('userId', args.userId))
+      .order('desc', 'createdAt')
       .collect();
   },
 });
@@ -101,15 +101,11 @@ This will:
 ### 4) Use it on the client
 
 ```ts
-import { useMutation, useQuery } from "convoy/react";
-import { api } from "../convoy/_generated/api";
+import { useMutation, useQuery } from 'convoy/react';
+import { api } from '../convoy/_generated/api';
 
 const createProject = useMutation(api.projects.createProject);
-const { data } = useQuery(
-  api.projects.listProjects,
-  { userId },
-  { enabled: false },
-);
+const { data } = useQuery(api.projects.listProjects, { userId }, { enabled: false });
 
 // Subscriptions are on by default. Disable them if needed:
 // useQuery(api.projects.listProjects, { userId }, { subscribe: false });
@@ -118,11 +114,11 @@ const { data } = useQuery(
 You can also call the client directly:
 
 ```ts
-import { createConvoyClient } from "convoy/client";
-import { api } from "../convoy/_generated/api";
+import { createConvoyClient } from 'convoy/client';
+import { api } from '../convoy/_generated/api';
 
 const client = createConvoyClient();
-await client.mutation(api.projects.createProject, { userId, name: "My App" });
+await client.mutation(api.projects.createProject, { userId, name: 'My App' });
 ```
 
 ### Realtime subscriptions (SSE)

@@ -1,7 +1,6 @@
-import type { Id } from "../types";
+import type { Id } from '../types';
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type ParsedId = {
   table: string;
@@ -13,7 +12,7 @@ export function isUuid(value: string): boolean {
 }
 
 export function parseId(value: string): ParsedId | null {
-  const separatorIndex = value.indexOf(":");
+  const separatorIndex = value.indexOf(':');
   if (separatorIndex <= 0) {
     return null;
   }

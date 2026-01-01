@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { defineTable } from "./utils/define-table";
-import { defineSchema } from "./utils/define-schema";
+import { z } from 'zod';
+import { defineTable } from './utils/define-table';
+import { defineSchema } from './utils/define-schema';
 
 const schema = defineSchema({
   users: defineTable({

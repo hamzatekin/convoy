@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { sql, type SQL } from "drizzle-orm";
-import type { Id, TableDefinition } from "./types";
-import { encodeId, isUuid, parseId } from "./utils/ids";
+import { z } from 'zod';
+import { sql, type SQL } from 'drizzle-orm';
+import type { Id, TableDefinition } from './types';
+import { encodeId, isUuid, parseId } from './utils/ids';
 
 type ArgsShape = z.ZodRawShape;
 type SchemaTables = Record<string, TableDefinition<any, any>>;
@@ -25,42 +25,34 @@ type DefaultContext = ConvoyContext<any>;
 export function createContext<TDb>(db: TDb): ConvoyContext<TDb> {
   const ctx = { db } as ConvoyContext<TDb>;
   ctx.runQuery = async (fn, args) => {
-    if (fn.kind !== "query") {
-      throw new Error("runQuery expects a query function");
+    if (fn.kind !== 'query') {
+      throw new Error('runQuery expects a query function');
     }
     return fn.run(ctx, args);
   };
   ctx.runMutation = async (fn, args) => {
-    if (fn.kind !== "mutation") {
-      throw new Error("runMutation expects a mutation function");
+    if (fn.kind !== 'mutation') {
+      throw new Error('runMutation expects a mutation function');
     }
     return fn.run(ctx, args);
   };
   return ctx;
 }
 
-export type ConvoyFunction<
-  TCtx,
-  TArgs extends ArgsShape,
-  TResult,
-> = {
-  kind: "query" | "mutation";
+export type ConvoyFunction<TCtx, TArgs extends ArgsShape, TResult> = {
+  kind: 'query' | 'mutation';
   args: TArgs;
   handler: (ctx: TCtx, args: z.infer<z.ZodObject<TArgs>>) => TResult | Promise<TResult>;
   run: (ctx: TCtx, args: unknown) => Promise<TResult>;
 };
 
-export type ConvoyFunctionDefinition<
-  TCtx = DefaultContext,
-  TArgs extends ArgsShape = ArgsShape,
-  TResult = unknown,
-> = {
+export type ConvoyFunctionDefinition<TCtx = DefaultContext, TArgs extends ArgsShape = ArgsShape, TResult = unknown> = {
   args: TArgs;
   handler: (ctx: TCtx, args: z.infer<z.ZodObject<TArgs>>) => TResult | Promise<TResult>;
 };
 
 function createFunction<TCtx, TArgs extends ArgsShape, TResult>(
-  kind: "query" | "mutation",
+  kind: 'query' | 'mutation',
   definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>,
 ): ConvoyFunction<TCtx, TArgs, TResult> {
   const argsSchema = z.object(definition.args);
@@ -75,48 +67,42 @@ function createFunction<TCtx, TArgs extends ArgsShape, TResult>(
 export function query<TCtx = DefaultContext, TArgs extends ArgsShape = ArgsShape, TResult = unknown>(
   definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>,
 ): ConvoyFunction<TCtx, TArgs, TResult> {
-  return createFunction("query", definition);
+  return createFunction('query', definition);
 }
 
 export function mutation<TCtx = DefaultContext, TArgs extends ArgsShape = ArgsShape, TResult = unknown>(
   definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>,
 ): ConvoyFunction<TCtx, TArgs, TResult> {
-  return createFunction("mutation", definition);
+  return createFunction('mutation', definition);
 }
 
 export function createFunctionHelpers<TCtx>() {
   return {
-    query: <TArgs extends ArgsShape, TResult>(
-      definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>,
-    ) => query<TCtx, TArgs, TResult>(definition),
-    mutation: <TArgs extends ArgsShape, TResult>(
-      definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>,
-    ) => mutation<TCtx, TArgs, TResult>(definition),
+    query: <TArgs extends ArgsShape, TResult>(definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>) =>
+      query<TCtx, TArgs, TResult>(definition),
+    mutation: <TArgs extends ArgsShape, TResult>(definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>) =>
+      mutation<TCtx, TArgs, TResult>(definition),
   };
 }
 
 type SqlRunner = {
-  execute: (query: SQL) => Promise<
-    { rows: unknown[] } | unknown[]
-  >;
+  execute: (query: SQL) => Promise<{ rows: unknown[] } | unknown[]>;
 };
 
-type RowFor<
-  TTables extends SchemaTables,
-  TTableName extends keyof TTables,
-> = z.output<TTables[TTableName]["schema"]> & {
+type RowFor<TTables extends SchemaTables, TTableName extends keyof TTables> = z.output<
+  TTables[TTableName]['schema']
+> & {
   id: Id<Extract<TTableName, string>>;
 };
 
-type TableIndexesFor<
-  TTables extends SchemaTables,
-  TTableName extends keyof TTables,
-> = NonNullable<TTables[TTableName]["indexes"]>;
+type TableIndexesFor<TTables extends SchemaTables, TTableName extends keyof TTables> = NonNullable<
+  TTables[TTableName]['indexes']
+>;
 
-type IndexNameFor<
-  TTables extends SchemaTables,
-  TTableName extends keyof TTables,
-> = Extract<keyof TableIndexesFor<TTables, TTableName>, string>;
+type IndexNameFor<TTables extends SchemaTables, TTableName extends keyof TTables> = Extract<
+  keyof TableIndexesFor<TTables, TTableName>,
+  string
+>;
 
 type IndexFieldFor<
   TTables extends SchemaTables,
@@ -124,40 +110,31 @@ type IndexFieldFor<
   TIndexName extends IndexNameFor<TTables, TTableName>,
 > = TableIndexesFor<TTables, TTableName>[TIndexName][number];
 
-type TableFieldsFor<
-  TTables extends SchemaTables,
-  TTableName extends keyof TTables,
-> = Extract<keyof z.output<TTables[TTableName]["schema"]>, string>;
+type TableFieldsFor<TTables extends SchemaTables, TTableName extends keyof TTables> = Extract<
+  keyof z.output<TTables[TTableName]['schema']>,
+  string
+>;
 
 type TableNameFromId<TTables extends SchemaTables, TId> =
-  TId extends Id<infer TTable>
-    ? Extract<TTable, keyof TTables>
-    : never;
+  TId extends Id<infer TTable> ? Extract<TTable, keyof TTables> : never;
 
 type QueryFilter = { field: string; value: unknown };
-type QueryOrder = { field: string; direction: "asc" | "desc" };
+type QueryOrder = { field: string; direction: 'asc' | 'desc' };
 
-type QueryBuilder<
-  TTables extends SchemaTables,
-  TTableName extends keyof TTables,
-> = {
+type QueryBuilder<TTables extends SchemaTables, TTableName extends keyof TTables> = {
   withIndex: <TIndexName extends IndexNameFor<TTables, TTableName>>(
     index: TIndexName,
-    build: (
-      q: { eq: (field: IndexFieldFor<TTables, TTableName, TIndexName>, value: unknown) => void },
-    ) => void,
+    build: (q: { eq: (field: IndexFieldFor<TTables, TTableName, TIndexName>, value: unknown) => void }) => void,
   ) => QueryBuilder<TTables, TTableName>;
   order: (
-    direction: "asc" | "desc",
-    field?: TableFieldsFor<TTables, TTableName> | "id",
+    direction: 'asc' | 'desc',
+    field?: TableFieldsFor<TTables, TTableName> | 'id',
   ) => QueryBuilder<TTables, TTableName>;
   collect: () => Promise<Array<RowFor<TTables, TTableName>>>;
   first: () => Promise<RowFor<TTables, TTableName> | null>;
 };
 
-function normalizeRows<TRow extends Record<string, unknown>>(
-  result: { rows: unknown[] } | unknown[],
-): TRow[] {
+function normalizeRows<TRow extends Record<string, unknown>>(result: { rows: unknown[] } | unknown[]): TRow[] {
   const rows = Array.isArray(result) ? result : result.rows;
   return rows as TRow[];
 }
@@ -167,10 +144,10 @@ function jsonField(field: string): SQL {
 }
 
 function fieldForComparison(field: string, value: unknown): SQL {
-  if (typeof value === "number") {
+  if (typeof value === 'number') {
     return sql`${jsonField(field)}::numeric`;
   }
-  if (typeof value === "boolean") {
+  if (typeof value === 'boolean') {
     return sql`${jsonField(field)}::boolean`;
   }
   return jsonField(field);
@@ -181,9 +158,9 @@ function buildWhere(tableKey: string, filters: QueryFilter[]): SQL {
     return sql``;
   }
   const clauses = filters.map((filter) => {
-    if (filter.field === "id") {
-      if (typeof filter.value !== "string") {
-        throw new Error("id filters must be strings");
+    if (filter.field === 'id') {
+      if (typeof filter.value !== 'string') {
+        throw new Error('id filters must be strings');
       }
       const parsed = parseId(filter.value);
       if (parsed && parsed.table !== tableKey) {
@@ -195,7 +172,7 @@ function buildWhere(tableKey: string, filters: QueryFilter[]): SQL {
       if (isUuid(filter.value)) {
         return sql`id = ${filter.value}`;
       }
-      throw new Error("Invalid id format");
+      throw new Error('Invalid id format');
     }
     return sql`${fieldForComparison(filter.field, filter.value)} = ${filter.value}`;
   });
@@ -206,9 +183,8 @@ function buildOrder(order: QueryOrder | null): SQL {
   if (!order) {
     return sql``;
   }
-  const orderField =
-    order.field === "id" ? sql`id` : fieldForComparison(order.field, "");
-  const direction = order.direction === "asc" ? "asc" : "desc";
+  const orderField = order.field === 'id' ? sql`id` : fieldForComparison(order.field, '');
+  const direction = order.direction === 'asc' ? 'asc' : 'desc';
   return sql`ORDER BY ${orderField} ${sql.raw(direction)}`;
 }
 
@@ -225,7 +201,7 @@ export function createDb<TTables extends SchemaTables>(
 ): {
   insert: <TTableName extends keyof TTables>(
     table: TTableName,
-    data: z.input<TTables[TTableName]["schema"]>,
+    data: z.input<TTables[TTableName]['schema']>,
   ) => Promise<Id<Extract<TTableName, string>>>;
   get: {
     <TTableName extends keyof TTables>(
@@ -240,18 +216,14 @@ export function createDb<TTables extends SchemaTables>(
     <TTableName extends keyof TTables>(
       table: TTableName,
       id: Id<Extract<TTableName, string>>,
-      data: Partial<z.input<TTables[TTableName]["schema"]>>,
+      data: Partial<z.input<TTables[TTableName]['schema']>>,
     ): Promise<RowFor<TTables, TTableName> | null>;
     <TId extends Id<Extract<keyof TTables, string>>>(
       id: TId,
-      data: Partial<
-        z.input<TTables[TableNameFromId<TTables, TId>]["schema"]>
-      >,
+      data: Partial<z.input<TTables[TableNameFromId<TTables, TId>]['schema']>>,
     ): Promise<RowFor<TTables, TableNameFromId<TTables, TId>> | null>;
   };
-  query: <TTableName extends keyof TTables>(
-    table: TTableName,
-  ) => QueryBuilder<TTables, TTableName>;
+  query: <TTableName extends keyof TTables>(table: TTableName) => QueryBuilder<TTables, TTableName>;
 } {
   function tableDefinitionByKey(tableKey: string) {
     const table = schema[tableKey as keyof TTables];
@@ -270,19 +242,16 @@ export function createDb<TTables extends SchemaTables>(
     return tableDefinitionByKey(tableKey);
   }
 
-  function assertSchemaField(
-    definition: TableDefinition<any, any>,
-    field: string,
-  ): void {
+  function assertSchemaField(definition: TableDefinition<any, any>, field: string): void {
     const shape = definition.schema.shape;
-    if (!shape || typeof shape !== "object" || !(field in shape)) {
+    if (!shape || typeof shape !== 'object' || !(field in shape)) {
       throw new Error(`Unknown field "${field}"`);
     }
   }
 
   function resolveUuidForTable(tableKey: string, value: unknown): string {
-    if (typeof value !== "string") {
-      throw new Error("id must be a string");
+    if (typeof value !== 'string') {
+      throw new Error('id must be a string');
     }
     const parsed = parseId(value);
     if (parsed) {
@@ -294,16 +263,16 @@ export function createDb<TTables extends SchemaTables>(
     if (isUuid(value)) {
       return value;
     }
-    throw new Error("Invalid id format");
+    throw new Error('Invalid id format');
   }
 
   function resolveTableFromId(value: unknown) {
-    if (typeof value !== "string") {
-      throw new Error("id must be a string");
+    if (typeof value !== 'string') {
+      throw new Error('id must be a string');
     }
     const parsed = parseId(value);
     if (!parsed) {
-      throw new Error("Expected <table>:<uuid>");
+      throw new Error('Expected <table>:<uuid>');
     }
     return { ...tableDefinitionByKey(parsed.table), uuid: parsed.uuid };
   }
@@ -315,7 +284,7 @@ export function createDb<TTables extends SchemaTables>(
 
   async function insert<TTableName extends keyof TTables>(
     table: TTableName,
-    data: z.input<TTables[TTableName]["schema"]>,
+    data: z.input<TTables[TTableName]['schema']>,
   ): Promise<Id<Extract<TTableName, string>>> {
     const { tableKey, tableName, definition } = tableInfo(table);
     const parsed = definition.schema.parse(data);
@@ -368,13 +337,11 @@ export function createDb<TTables extends SchemaTables>(
   async function patch<TTableName extends keyof TTables>(
     table: TTableName,
     id: Id<Extract<TTableName, string>>,
-    data: Partial<z.input<TTables[TTableName]["schema"]>>,
+    data: Partial<z.input<TTables[TTableName]['schema']>>,
   ): Promise<RowFor<TTables, TTableName> | null>;
   async function patch<TId extends Id<Extract<keyof TTables, string>>>(
     id: TId,
-    data: Partial<
-      z.input<TTables[TableNameFromId<TTables, TId>]["schema"]>
-    >,
+    data: Partial<z.input<TTables[TableNameFromId<TTables, TId>]['schema']>>,
   ): Promise<RowFor<TTables, TableNameFromId<TTables, TId>> | null>;
   async function patch(
     tableOrId: keyof TTables | Id<Extract<keyof TTables, string>>,
@@ -410,13 +377,10 @@ export function createDb<TTables extends SchemaTables>(
     };
   }
 
-  function queryTable<TTableName extends keyof TTables>(
-    table: TTableName,
-  ): QueryBuilder<TTables, TTableName> {
+  function queryTable<TTableName extends keyof TTables>(table: TTableName): QueryBuilder<TTables, TTableName> {
     const { tableKey, tableName, definition } = tableInfo(table);
     const shape = definition.schema.shape;
-    const defaultOrderField =
-      shape && typeof shape === "object" && "createdAt" in shape ? "createdAt" : "id";
+    const defaultOrderField = shape && typeof shape === 'object' && 'createdAt' in shape ? 'createdAt' : 'id';
     const filters: QueryFilter[] = [];
     let order: QueryOrder | null = null;
     let limit: number | null = null;
@@ -431,11 +395,9 @@ export function createDb<TTables extends SchemaTables>(
         build({
           eq: (field, value) => {
             if (!indexFields.includes(field as string)) {
-              throw new Error(
-                `Field "${String(field)}" is not part of index "${String(index)}"`,
-              );
+              throw new Error(`Field "${String(field)}" is not part of index "${String(index)}"`);
             }
-            if (field !== "id") {
+            if (field !== 'id') {
               assertSchemaField(definition, String(field));
             }
             filters.push({ field, value });
@@ -445,14 +407,17 @@ export function createDb<TTables extends SchemaTables>(
       },
       order: (direction, field) => {
         const nextField = field ?? defaultOrderField;
-        if (nextField !== "id") {
+        if (nextField !== 'id') {
           assertSchemaField(definition, nextField);
         }
         order = { direction, field: nextField };
         return builder;
       },
       collect: async () => {
-        const rows = await run<{ id: string; data: Record<string, unknown> }>(sql`
+        const rows = await run<{
+          id: string;
+          data: Record<string, unknown>;
+        }>(sql`
           SELECT id, data
           FROM ${sql.identifier(tableName)}
           ${buildWhere(tableKey, filters)}
@@ -484,5 +449,4 @@ export function createDb<TTables extends SchemaTables>(
   };
 }
 
-export type DbFromSchema<TSchema extends SchemaTables> =
-  ReturnType<typeof createDb<TSchema>>;
+export type DbFromSchema<TSchema extends SchemaTables> = ReturnType<typeof createDb<TSchema>>;

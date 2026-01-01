@@ -1,18 +1,18 @@
-import { useState } from "react";
-import type { Id } from "convoy";
-import { useMutation } from "convoy/react";
-import type { Doc } from "../../convoy/_generated/dataModel";
-import { api } from "../../convoy/_generated/api.ts";
+import { useState } from 'react';
+import type { Id } from 'convoy';
+import { useMutation } from 'convoy/react';
+import type { Doc } from '../../convoy/_generated/dataModel';
+import { api } from '../../convoy/_generated/api.ts';
 
-const PROJECT_STATUSES = ["planning", "active", "blocked", "done"] as const;
+const PROJECT_STATUSES = ['planning', 'active', 'blocked', 'done'] as const;
 type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 type ProjectsPanelProps = {
-  userId: Id<"users"> | null;
-  projects: Array<Doc<"projects">>;
+  userId: Id<'users'> | null;
+  projects: Array<Doc<'projects'>>;
   projectsLoading: boolean;
-  selectedProjectId: Id<"projects"> | null;
-  setSelectedProjectId: (value: Id<"projects"> | null) => void;
+  selectedProjectId: Id<'projects'> | null;
+  setSelectedProjectId: (value: Id<'projects'> | null) => void;
   setStatus: (value: string) => void;
   setError: (value: string | null) => void;
 };
@@ -26,9 +26,9 @@ export default function ProjectsPanel({
   setStatus,
   setError,
 }: ProjectsPanelProps) {
-  const [projectName, setProjectName] = useState("Launch roadmap");
-  const [projectDescription, setProjectDescription] = useState("");
-  const [projectStatus, setProjectStatus] = useState<ProjectStatus>("active");
+  const [projectName, setProjectName] = useState('Launch roadmap');
+  const [projectDescription, setProjectDescription] = useState('');
+  const [projectStatus, setProjectStatus] = useState<ProjectStatus>('active');
 
   const createProject = useMutation(api.projects.createProject);
   const updateProjectStatus = useMutation(api.projects.updateProjectStatus);
@@ -40,7 +40,7 @@ export default function ProjectsPanel({
       return;
     }
     setError(null);
-    setStatus("Creating project...");
+    setStatus('Creating project...');
     try {
       const id = await createProject({
         userId,
@@ -49,28 +49,25 @@ export default function ProjectsPanel({
         description: projectDescription.trim() || undefined,
       });
       setSelectedProjectId(id);
-      setProjectName("New initiative");
-      setProjectDescription("");
-      setProjectStatus("active");
-      setStatus("Project created");
+      setProjectName('New initiative');
+      setProjectDescription('');
+      setProjectStatus('active');
+      setStatus('Project created');
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Mutation failed";
+      const message = err instanceof Error ? err.message : 'Mutation failed';
       setError(message);
       setStatus(`Error: ${message}`);
     }
   }
 
-  async function handleUpdateProjectStatus(
-    projectId: Id<"projects">,
-    nextStatus: ProjectStatus
-  ) {
+  async function handleUpdateProjectStatus(projectId: Id<'projects'>, nextStatus: ProjectStatus) {
     setError(null);
-    setStatus("Updating project status...");
+    setStatus('Updating project status...');
     try {
       await updateProjectStatus({ projectId, status: nextStatus });
-      setStatus("Project status updated");
+      setStatus('Project status updated');
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Mutation failed";
+      const message = err instanceof Error ? err.message : 'Mutation failed';
       setError(message);
       setStatus(`Error: ${message}`);
     }
@@ -85,15 +82,10 @@ export default function ProjectsPanel({
           onChange={(event) => setProjectName(event.target.value)}
           placeholder="Project name"
         />
-        <select
-          value={projectStatus}
-          onChange={(event) =>
-            setProjectStatus(event.target.value as ProjectStatus)
-          }
-        >
+        <select value={projectStatus} onChange={(event) => setProjectStatus(event.target.value as ProjectStatus)}>
           {PROJECT_STATUSES.map((value) => (
             <option key={value} value={value}>
-              {value.replace("_", " ")}
+              {value.replace('_', ' ')}
             </option>
           ))}
         </select>
@@ -107,48 +99,30 @@ export default function ProjectsPanel({
         placeholder="Short description (optional)"
       />
       <div className="meta-row">
-        <span className="muted">
-          {projectsLoading ? "Loading..." : `${projects.length} project(s)`}
-        </span>
+        <span className="muted">{projectsLoading ? 'Loading...' : `${projects.length} project(s)`}</span>
       </div>
       <ul className="list">
         {projects.length === 0 ? (
           <li className="list-item muted">No projects yet.</li>
         ) : (
           projects.map((project) => (
-            <li
-              key={project.id}
-              className={
-                project.id === selectedProjectId
-                  ? "list-item active"
-                  : "list-item"
-              }
-            >
+            <li key={project.id} className={project.id === selectedProjectId ? 'list-item active' : 'list-item'}>
               <div className="stack">
                 <strong>{project.name}</strong>
                 <span className="muted mono">{project.id}</span>
-                {project.description ? (
-                  <span className="muted">{project.description}</span>
-                ) : null}
+                {project.description ? <span className="muted">{project.description}</span> : null}
               </div>
               <div className="stack">
                 <span className="pill">{project.status}</span>
                 <div className="row">
-                  <button onClick={() => setSelectedProjectId(project.id)}>
-                    View tasks
-                  </button>
+                  <button onClick={() => setSelectedProjectId(project.id)}>View tasks</button>
                   <select
                     value={project.status}
-                    onChange={(event) =>
-                      handleUpdateProjectStatus(
-                        project.id,
-                        event.target.value as ProjectStatus
-                      )
-                    }
+                    onChange={(event) => handleUpdateProjectStatus(project.id, event.target.value as ProjectStatus)}
                   >
                     {PROJECT_STATUSES.map((value) => (
                       <option key={value} value={value}>
-                        {value.replace("_", " ")}
+                        {value.replace('_', ' ')}
                       </option>
                     ))}
                   </select>

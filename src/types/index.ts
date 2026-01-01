@@ -1,4 +1,4 @@
-import type z from "zod";
+import type z from 'zod';
 
 export type Id<TableName extends string> = `${TableName}:${string}` & {
   __table: TableName;
@@ -6,10 +6,7 @@ export type Id<TableName extends string> = `${TableName}:${string}` & {
 
 export type TableShape = z.ZodRawShape;
 
-export type TableIndexes<TShape extends TableShape> = Record<
-  string,
-  readonly (keyof TShape & string)[]
->;
+export type TableIndexes<TShape extends TableShape> = Record<string, readonly (keyof TShape & string)[]>;
 
 export type TableDefinition<
   TShape extends TableShape,
@@ -22,6 +19,4 @@ export type TableDefinition<
   isValid: (value: unknown) => value is z.output<z.ZodObject<TShape>>;
 };
 
-export type InferTableRow<
-  TTable extends TableDefinition<TableShape, any>,
-> = z.infer<TTable["schema"]>;
+export type InferTableRow<TTable extends TableDefinition<TableShape, any>> = z.infer<TTable['schema']>;
