@@ -44,8 +44,7 @@ const localInvalidationListeners = new Set<InvalidationListener>();
 const debugEnabled =
   (typeof window !== "undefined" &&
     window.localStorage?.getItem("CONVOY_DEBUG") === "1") ||
-  (typeof process !== "undefined" &&
-    process.env?.CONVOY_DEBUG === "1");
+  (typeof process !== "undefined" && process.env?.CONVOY_DEBUG === "1");
 
 function debugLog(message: string, details?: unknown): void {
   if (!debugEnabled) {

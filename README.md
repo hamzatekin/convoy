@@ -1,17 +1,21 @@
 # Convoy
 
-Convex‑style DX, but Postgres‑native.
+**Convex-style reactive backend DX — on your own Postgres.**
 
-Convex‑style DX, but Postgres‑native. Start fast with JSONB, ship quickly, and when the product hardens you can migrate hot paths into relational tables without rewriting your app.
+Convoy is a backend runtime lets you build backends by writing **queries and mutations** and
+your UI stays in sync automatically via **server-pushed updates**, while you keep full ownership of your database.
 
-Status: **0.0.1-alpha** (early, fast-moving, APIs will change)
+Start fast with **JSONB documents**, ship quickly, and when your product hardens, **migrate hot paths to relational tables** without rewriting your app.
+
+**Status:** `0.0.1-alpha`
 
 ## Why Convoy
 
 - Postgres as the source of truth (self-hostable, future-safe)
 - JSONB-first schema for fast iteration
 - End-to-end TypeScript types from server to client
-- `query()` / `mutation()` API (no SQL in client code)
+- Realtime query subscriptions (Postgres LISTEN/NOTIFY + SSE results)
+- `query()` / `mutation()` API
 
 ## Install
 
@@ -28,12 +32,13 @@ bun add convoy zod pg drizzle-orm
 Create `convoy/schema.ts` in your project root:
 
 ```ts
-import { z } from "zod";
+// src/convoy/schema.ts
 import { defineSchema, defineTable, defineRef } from "convoy";
+import { z } from "zod";
 
-const schema = defineSchema({
+export const schema = defineSchema({
   users: defineTable({
-    deviceId: z.string(),
+    name: z.string(),
     createdAt: z.number(),
   }),
   projects: defineTable({
@@ -42,8 +47,6 @@ const schema = defineSchema({
     createdAt: z.number(),
   }).index("by_userId", ["userId"]),
 });
-
-export default schema;
 ```
 
 ### 2) Write queries + mutations
@@ -84,13 +87,15 @@ export const listProjects = query({
 Run the dev command (watches for changes by default, use `--once` for a single sync):
 
 ```bash
-bun run scripts/convoy-dev.ts --root .
+npx convoy-dev
 ```
 
 This will:
+
 - create the database if needed
 - create tables + JSONB indexes
 - generate `convoy/_generated/api.ts`, `convoy/_generated/functions.ts`, and `convoy/_generated/server.ts`
+- generate `convoy/_generated/http.ts` (HTTP + SSE subscriptions)
 - start the local Convoy HTTP server
 
 ### 4) Use it on the client
@@ -100,11 +105,14 @@ import { useMutation, useQuery } from "convoy/react";
 import { api } from "../convoy/_generated/api";
 
 const createProject = useMutation(api.projects.createProject);
-const { data, refetch } = useQuery(
+const { data } = useQuery(
   api.projects.listProjects,
   { userId },
   { enabled: false },
 );
+
+// Subscriptions are on by default. Disable them if needed:
+// useQuery(api.projects.listProjects, { userId }, { subscribe: false });
 ```
 
 You can also call the client directly:
@@ -117,30 +125,26 @@ const client = createConvoyClient();
 await client.mutation(api.projects.createProject, { userId, name: "My App" });
 ```
 
-## CLI
+### Realtime subscriptions (SSE)
 
-Currently a single command for dev + sync (also starts the local server):
-
-```bash
-bun run scripts/convoy-dev.ts --root .
-```
-
-Flags:
-- `--once` to run a single sync and exit
-- `--no-serve` to skip starting the server
+Convoy uses Postgres LISTEN/NOTIFY to refresh query subscriptions. The server
+listens for NOTIFY events and re-runs active queries, streaming results over SSE.
+On the client, `useQuery` opens an `EventSource` to `/api/subscribe` with the
+query name + args, and updates the hook state when new results arrive.
 
 Config:
+
 - `DATABASE_URL` in `.env` (required)
 - assumes `convoy/schema.ts` exists
 
 ## Roadmap + vision
 
-V1 progress: [=====-----] 50%
+V1 progress: [======----] 60%
 
 - [x] typed schema + references
 - [x] typed queries/mutations
 - [x] JSONB storage + indexes
-- [ ] realtime invalidation (mutation -> event -> refetch)
+- [x] realtime subscriptions (LISTEN/NOTIFY + SSE results)
 - [ ] optional TanStack Query integration
 - [ ] shipped CLI binary (no TS loader required)
 - [ ] sync primitives (realtime + offline-ready) built on a simple invalidate/refetch core
