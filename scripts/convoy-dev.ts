@@ -39,7 +39,9 @@ type FunctionExport = {
   moduleVar: string;
 };
 
-type ApiTree = Record<string, ApiTree | FunctionExport>;
+interface ApiTree {
+  [key: string]: ApiTree | FunctionExport;
+}
 
 type ModuleInfo = {
   filePath: string;

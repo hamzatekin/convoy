@@ -20,7 +20,7 @@ Start fast with **JSONB documents**, ship quickly, and when your product hardens
 ## Install
 
 ```bash
-bun add convoy zod pg drizzle-orm
+bun add convoy zod
 ```
 
 > Using Node? You can run the CLI with `node` + a TS loader (ex: `tsx`), but Bun is the easiest path right now.
@@ -110,6 +110,9 @@ const { data } = useQuery(api.projects.listProjects, { userId }, { enabled: fals
 // Subscriptions are on by default. Disable them if needed:
 // useQuery(api.projects.listProjects, { userId }, { subscribe: false });
 ```
+
+Note: `convoy/react` is an optional subpath export. Install `react` in apps that
+use it; non-React projects can ignore it without warnings.
 
 You can also call the client directly:
 
