@@ -45,6 +45,7 @@
     "playground:convoy:server:debug": "CONVOY_DEBUG=1 bun run --cwd playground convoy:server",
     "prepare": "husky",
     "format": "prettier --write .",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -55,15 +56,16 @@
     "zod": "^3.23.0 || ^4.0.0"
   },
   "devDependencies": {
-    "zod": "^4.2.1",
-    "react": "^19.1.1",
-    "@types/react": "^19.1.13",
     "@types/node": "^25.0.3",
     "@types/pg": "^8.15.5",
+    "@types/react": "^19.1.13",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
+    "react": "^19.1.1",
     "typescript": "~5.9.3",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^4.0.16",
+    "zod": "^4.2.1"
   }
 }

@@ -29,7 +29,7 @@ const DEFAULT_MAX_BODY_SIZE = 1024 * 1024;
 
 export type ConvoyMutationEvent<TContext> = {
   name: string;
-  args: unknown;
+  input: unknown;
   result: unknown;
   context: TContext;
 };
@@ -143,11 +143,11 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
       return true;
     }
 
-    let args: unknown = {};
+    let input: unknown = {};
     try {
       const body = await readBody(req, maxBodySize);
       if (body) {
-        args = JSON.parse(body);
+        input = JSON.parse(body);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid request body';
@@ -163,11 +163,11 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
         sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
         return true;
       }
-      const data = await fn.run(ctx, args);
+      const data = await fn.run(ctx, input);
       if (kind === 'mutation') {
         await notifyMutation(options, {
           name,
-          args,
+          input,
           result: data,
           context: ctx,
         });

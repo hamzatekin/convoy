@@ -6,39 +6,39 @@ const TaskStatus = z.enum(['todo', 'in_progress', 'done']);
 const TaskPriority = z.enum(['low', 'medium', 'high']);
 
 export const createTask = mutation({
-  args: {
+  input: {
     projectId: defineRef('projects'),
     title: z.string(),
     status: TaskStatus.optional(),
     priority: TaskPriority.optional(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, input) => {
     return ctx.db.insert('tasks', {
-      projectId: args.projectId,
-      title: args.title,
-      status: args.status ?? 'todo',
-      priority: args.priority ?? 'medium',
+      projectId: input.projectId,
+      title: input.title,
+      status: input.status ?? 'todo',
+      priority: input.priority ?? 'medium',
       createdAt: Date.now(),
     });
   },
 });
 
 export const listTasks = query({
-  args: { projectId: defineRef('projects') },
-  handler: async (ctx, args) => {
+  input: { projectId: defineRef('projects') },
+  handler: async (ctx, input) => {
     return ctx.db
       .query('tasks')
-      .withIndex('by_projectId', (q) => q.eq('projectId', args.projectId))
+      .withIndex('by_projectId', (q) => q.eq('projectId', input.projectId))
       .order('desc', 'createdAt')
       .collect();
   },
 });
 
 export const updateTaskStatus = mutation({
-  args: { taskId: defineRef('tasks'), status: TaskStatus },
-  handler: async (ctx, args) => {
-    return ctx.db.patch('tasks', args.taskId, {
-      status: args.status,
+  input: { taskId: defineRef('tasks'), status: TaskStatus },
+  handler: async (ctx, input) => {
+    return ctx.db.patch('tasks', input.taskId, {
+      status: input.status,
     });
   },
 });

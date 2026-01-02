@@ -5,39 +5,39 @@ import { z } from 'zod';
 const ProjectStatus = z.enum(['planning', 'active', 'blocked', 'done']);
 
 export const createProject = mutation({
-  args: {
+  input: {
     userId: defineRef('users'),
     name: z.string(),
     status: ProjectStatus.optional(),
     description: z.string().optional(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, input) => {
     return ctx.db.insert('projects', {
-      name: args.name,
-      userId: args.userId,
-      status: args.status ?? 'active',
-      description: args.description,
+      name: input.name,
+      userId: input.userId,
+      status: input.status ?? 'active',
+      description: input.description,
       createdAt: Date.now(),
     });
   },
 });
 
 export const listProjects = query({
-  args: { userId: defineRef('users') },
-  handler: async (ctx, args) => {
+  input: { userId: defineRef('users') },
+  handler: async (ctx, input) => {
     return ctx.db
       .query('projects')
-      .withIndex('by_userId', (q) => q.eq('userId', args.userId))
+      .withIndex('by_userId', (q) => q.eq('userId', input.userId))
       .order('desc', 'createdAt')
       .collect();
   },
 });
 
 export const updateProjectStatus = mutation({
-  args: { projectId: defineRef('projects'), status: ProjectStatus },
-  handler: async (ctx, args) => {
-    return ctx.db.patch('projects', args.projectId, {
-      status: args.status,
+  input: { projectId: defineRef('projects'), status: ProjectStatus },
+  handler: async (ctx, input) => {
+    return ctx.db.patch('projects', input.projectId, {
+      status: input.status,
     });
   },
 });

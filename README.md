@@ -2,28 +2,54 @@
 
 **Convex-style reactive backend DX — on your own Postgres.**
 
-Convoy is a backend runtime lets you build backends by writing **queries and mutations** and
-your UI stays in sync automatically via **server-pushed updates**, while you keep full ownership of your database.
+Convoy is a self-hosted backend runtime where you build your backend by writing **queries and mutations**, and your UI stays in sync automatically via **server-pushed updates**.
 
-Start fast with **JSONB documents**, ship quickly, and when your product hardens, **migrate hot paths to relational tables** without rewriting your app.
+You keep full ownership of your database. Convoy handles execution, typing, and reactivity.
 
-**Status:** `0.0.1-alpha`
+Start fast with **JSONB document tables**, iterate quickly, and keep a clear path toward stricter schemas and relational data as your product matures.
+
+**Status:** `0.0.x` — MVP (core ideas implemented, APIs still stabilizing)
+
+---
 
 ## Why Convoy
 
-- Postgres as the source of truth (self-hostable, future-safe)
-- JSONB-first schema for fast iteration
-- End-to-end TypeScript types from server to client
-- Realtime query subscriptions (Postgres LISTEN/NOTIFY + SSE results)
-- `query()` / `mutation()` API
+- **Postgres as the source of truth** (self-hosted, future-proof)
+- **JSONB-first schema** for fast iteration
+- **End-to-end TypeScript types** (schema → server → client)
+- **Reactive queries** with server-pushed updates
+- No manual cache invalidation or refetch logic
+- Clear path to stronger schemas as your product grows
 
-## Install
+## Installation
 
 ```bash
 bun add convoy zod
 ```
 
 > Using Node? You can run the CLI with `node` + a TS loader (ex: `tsx`), but Bun is the easiest path right now.
+
+---
+
+## Core Concepts
+
+### Schema
+
+Define your data shape once using Zod. Convoy stores rows as JSONB documents in Postgres and ensures tables and indexes exist during development.
+
+### Queries
+
+Queries are pure read functions. Clients subscribe to queries and receive live updates automatically.
+
+### Mutations
+
+Mutations are write + business logic functions. When a mutation runs, Convoy invalidates affected queries and pushes updated results to subscribed clients.
+
+### Reactivity
+
+Convoy uses Postgres `LISTEN / NOTIFY` for change signals and Server-Sent Events (SSE) to stream authoritative query results to clients.
+
+---
 
 ## Quickstart
 
@@ -60,22 +86,22 @@ import { mutation, query } from '../_generated/server';
 import { z } from 'zod';
 
 export const createProject = mutation({
-  args: { userId: defineRef('users'), name: z.string() },
-  handler: async (ctx, args) => {
+  input: { userId: defineRef('users'), name: z.string() },
+  handler: async (ctx, input) => {
     return ctx.db.insert('projects', {
-      userId: args.userId,
-      name: args.name,
+      userId: input.userId,
+      name: input.name,
       createdAt: Date.now(),
     });
   },
 });
 
 export const listProjects = query({
-  args: { userId: defineRef('users') },
-  handler: async (ctx, args) => {
+  input: { userId: defineRef('users') },
+  handler: async (ctx, input) => {
     return ctx.db
       .query('projects')
-      .withIndex('by_userId', (q) => q.eq('userId', args.userId))
+      .withIndex('by_userId', (q) => q.eq('userId', input.userId))
       .order('desc', 'createdAt')
       .collect();
   },
@@ -98,7 +124,7 @@ This will:
 - generate `convoy/_generated/http.ts` (HTTP + SSE subscriptions)
 - start the local Convoy HTTP server
 
-### 4) Use it on the client
+### 4) Use it on the client (React)
 
 ```ts
 import { useMutation, useQuery } from 'convoy/react';
@@ -106,15 +132,9 @@ import { api } from '../convoy/_generated/api';
 
 const createProject = useMutation(api.projects.createProject);
 const { data } = useQuery(api.projects.listProjects, { userId }, { enabled: false });
-
-// Subscriptions are on by default. Disable them if needed:
-// useQuery(api.projects.listProjects, { userId }, { subscribe: false });
 ```
 
-Note: `convoy/react` is an optional subpath export. Install `react` in apps that
-use it; non-React projects can ignore it without warnings.
-
-You can also call the client directly:
+Direct client usage (non-React)
 
 ```ts
 import { createConvoyClient } from 'convoy/client';
@@ -124,31 +144,39 @@ const client = createConvoyClient();
 await client.mutation(api.projects.createProject, { userId, name: 'My App' });
 ```
 
-### Realtime subscriptions (SSE)
+### How reactivity works (high level)
 
-Convoy uses Postgres LISTEN/NOTIFY to refresh query subscriptions. The server
-listens for NOTIFY events and re-runs active queries, streaming results over SSE.
-On the client, `useQuery` opens an `EventSource` to `/api/subscribe` with the
-query name + args, and updates the hook state when new results arrive.
+1. useQuery opens an SSE subscription
+2. The server runs the query and streams the initial result
+3. A mutation runs and writes to Postgres
+4. Postgres emits NOTIFY
+5. The server refreshes affected subscriptions
+6. Updated query results are pushed to clients
 
-Config:
+The server is always the source of truth.
 
-- `DATABASE_URL` in `.env` (required)
-- assumes `convoy/schema.ts` exists
+### Roadmap (high level)
 
-## Roadmap + vision
+Near-term (v1):
 
-V1 progress: [======----] 60%
+- runtime hardening and reconnect guarantees
+- structured error handling
+- auth patterns via request context
+- clear dev vs deploy workflows
+- escape hatches (raw SQL, interop)
 
-- [x] typed schema + references
-- [x] typed queries/mutations
-- [x] JSONB storage + indexes
-- [x] realtime subscriptions (LISTEN/NOTIFY + SSE results)
-- [ ] optional TanStack Query integration
-- [ ] shipped CLI binary (no TS loader required)
-- [ ] sync primitives (realtime + offline-ready) built on a simple invalidate/refetch core
-- [ ] JSONB-to-relational migrations that keep types stable and make upgrades mechanical
+#### Later:
+
+- WebSocket transport (alternative to SSE)
+- mobile-friendly subscriptions
+- optional advanced client adapters
+- guided JSONB → relational migration tooling
+- optional managed hosting
+
+See ROADMAP.md for details.
 
 ---
 
-MIT License (coming soon). Contributions welcome once the API stabilizes.
+License
+
+MIT (planned once APIs stabilize)

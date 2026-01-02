@@ -457,15 +457,15 @@ import type { ZodRawShape } from "zod";
 type Db = DbFromSchema<typeof schema>;
 export type ServerContext = ConvoyContext<Db>;
 
-type ArgsShape = ZodRawShape;
+type InputShape = ZodRawShape;
 
-export declare const query: <TArgs extends ArgsShape, TResult>(
-  definition: ConvoyFunctionDefinition<ServerContext, TArgs, TResult>,
-) => ConvoyFunction<ServerContext, TArgs, TResult>;
+export declare const query: <TInput extends InputShape, TResult>(
+  definition: ConvoyFunctionDefinition<ServerContext, TInput, TResult>,
+) => ConvoyFunction<ServerContext, TInput, TResult>;
 
-export declare const mutation: <TArgs extends ArgsShape, TResult>(
-  definition: ConvoyFunctionDefinition<ServerContext, TArgs, TResult>,
-) => ConvoyFunction<ServerContext, TArgs, TResult>;
+export declare const mutation: <TInput extends InputShape, TResult>(
+  definition: ConvoyFunctionDefinition<ServerContext, TInput, TResult>,
+) => ConvoyFunction<ServerContext, TInput, TResult>;
 `;
 
   await writeFileIfChanged(path.join(generatedDir, 'server.d.ts'), content);
@@ -492,6 +492,8 @@ import { createNodeServer } from "${nodeRuntimeImport}";
 import { mutations, queries } from "./functions";
 
 const DEFAULT_INVALIDATION_CHANNEL = "convoy_invalidation";
+const DEFAULT_SSE_RETRY_MS = 1000;
+const DEFAULT_SSE_HEARTBEAT_MS = 25000;
 const DEBUG = process.env.CONVOY_DEBUG === "1";
 
 type InvalidationListener = {
@@ -519,6 +521,7 @@ type QuerySubscription = {
   fn: (typeof queries)[keyof typeof queries];
   running: boolean;
   pending: boolean;
+  heartbeat: ReturnType<typeof setInterval>;
 };
 
 export type ConvoyHttpOptions = {
@@ -650,8 +653,17 @@ function createQuerySubscriptionManager<TDb>(db: TDb) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     });
-    res.write("\\n");
+    res.write("retry: " + DEFAULT_SSE_RETRY_MS + "\\n");
+    res.write(": ok\\n\\n");
+
+    const heartbeat = setInterval(() => {
+      if (res.writableEnded || res.destroyed) {
+        return;
+      }
+      res.write(": ping\\n\\n");
+    }, DEFAULT_SSE_HEARTBEAT_MS);
 
     const subscription: QuerySubscription = {
       res,
@@ -660,12 +672,14 @@ function createQuerySubscriptionManager<TDb>(db: TDb) {
       fn,
       running: false,
       pending: false,
+      heartbeat,
     };
     subscriptions.add(subscription);
     debugLog("Query subscribed", { name, count: subscriptions.size });
 
     const cleanup = () => {
       subscriptions.delete(subscription);
+      clearInterval(subscription.heartbeat);
       debugLog("Query unsubscribed", { name, count: subscriptions.size });
     };
     res.on("close", cleanup);
