@@ -1,18 +1,18 @@
+// convoy/functions/projects.ts
 import { defineRef } from '../../../src/index.ts';
-import { mutation, query } from '../_generated/server';
 import { z } from 'zod';
-import { requireAuth } from './_auth';
+import { authMutation, authQuery, requireAuth } from './_auth';
 
 const ProjectStatus = z.enum(['planning', 'active', 'blocked', 'done']);
 
-export const createProject = mutation({
+export const createProject = authMutation({
   input: {
     name: z.string(),
     status: ProjectStatus.optional(),
     description: z.string().optional(),
   },
   handler: async (ctx, input) => {
-    const auth = requireAuth(ctx as any);
+    const auth = requireAuth(ctx);
     return ctx.db.insert('projects', {
       name: input.name,
       userId: auth.userId,
@@ -23,10 +23,10 @@ export const createProject = mutation({
   },
 });
 
-export const listProjects = query({
+export const listProjects = authQuery({
   input: {},
-  handler: async (ctx, input) => {
-    const auth = requireAuth(ctx as any);
+  handler: async (ctx) => {
+    const auth = requireAuth(ctx);
     return ctx.db
       .query('projects')
       .withIndex('by_userId', (q) => q.eq('userId', auth.userId))
@@ -35,10 +35,10 @@ export const listProjects = query({
   },
 });
 
-export const updateProjectStatus = mutation({
+export const updateProjectStatus = authMutation({
   input: { projectId: defineRef('projects'), status: ProjectStatus },
   handler: async (ctx, input) => {
-    requireAuth(ctx as any);
+    requireAuth(ctx);
     return ctx.db.patch('projects', input.projectId, {
       status: input.status,
     });

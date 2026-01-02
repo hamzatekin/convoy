@@ -499,8 +499,15 @@ export async function generateHttpServer(rootDir: string, schemaPath: string): P
   const nodeRuntimeImport = await resolveNodeRuntimeImport(rootDir, generatedDir);
   const userServer = await resolveUserServerModule(rootDir, generatedDir);
   const userServerImport = userServer ? `import * as userServer from "${userServer.importPath}";\n` : '';
+  const httpContextType = userServer ? 'AppContext' : 'ServerContext';
   const userServerTypes = userServer
-    ? `type UserCreateContext = (req: IncomingMessage, base: ServerContext) => ServerContext | Promise<ServerContext>;
+    ? `type AppContext = typeof userServer.createContext extends (
+  req: IncomingMessage,
+  base: ServerContext,
+) => infer TResult
+  ? Awaited<TResult>
+  : ServerContext;
+type UserCreateContext = (req: IncomingMessage, base: ServerContext) => AppContext | Promise<AppContext>;
 type UserConfigureServer = (options: {
   server: ReturnType<typeof createNodeServer>;
   pool: Pool;
@@ -510,28 +517,29 @@ type UserConfigureServer = (options: {
 `
     : '';
   const userServerContext = userServer
-    ? `  const userCreateContext =
+    ? `  const overrideContext = options.createContext;
+  const userCreateContext =
     typeof userServer.createContext === "function"
       ? (userServer.createContext as UserCreateContext)
       : null;
   const missingCreateContext = (_req: IncomingMessage) => {
     throw new Error("Expected ${userServer.displayPath} to export createContext(req)");
   };
-  const resolveContext = options.createContext
-    ? (req: IncomingMessage) => options.createContext?.(req, createContext(db))
+  const resolveContext = overrideContext
+    ? (req: IncomingMessage) => overrideContext(req, createContext(db))
     : userCreateContext
       ? (req: IncomingMessage) => userCreateContext(req, createContext(db))
       : missingCreateContext;
 `
-    : `  const resolveContext = options.createContext
-    ? (req: IncomingMessage) => options.createContext?.(req, createContext(db))
+    : `  const overrideContext = options.createContext;
+  const resolveContext = overrideContext
+    ? (req: IncomingMessage) => overrideContext(req, createContext(db))
     : () => createContext(db);
 `;
   const userServerConfigure = userServer
-    ? `  const configureServer =
-    typeof userServer.configureServer === "function"
-      ? (userServer.configureServer as UserConfigureServer)
-      : null;
+    ? `  const maybeConfigure = (userServer as { configureServer?: unknown }).configureServer;
+  const configureServer =
+    typeof maybeConfigure === "function" ? (maybeConfigure as UserConfigureServer) : null;
   if (configureServer) {
     try {
       const result = configureServer({ server, pool, invalidationListener, options });
@@ -576,7 +584,7 @@ ${userServerTypes}export type ConvoyHttpOptions = {
   maxSubscriptions?: number;
   subscribePath?: string;
   invalidationChannel?: string;
-  createContext?: (req: IncomingMessage, base: ServerContext) => Promise<ServerContext> | ServerContext;
+  createContext?: (req: IncomingMessage, base: ServerContext) => Promise<${httpContextType}> | ${httpContextType};
 };
 
 function isValidChannelName(channel: string): boolean {

@@ -1,12 +1,11 @@
 import { defineRef } from '../../../src/index.ts';
-import { mutation, query } from '../_generated/server';
 import { z } from 'zod';
-import { requireAuth } from './_auth';
+import { authMutation, authQuery, requireAuth } from './_auth';
 
 const TaskStatus = z.enum(['todo', 'in_progress', 'done']);
 const TaskPriority = z.enum(['low', 'medium', 'high']);
 
-export const createTask = mutation({
+export const createTask = authMutation({
   input: {
     projectId: defineRef('projects'),
     title: z.string(),
@@ -14,7 +13,7 @@ export const createTask = mutation({
     priority: TaskPriority.optional(),
   },
   handler: async (ctx, input) => {
-    requireAuth(ctx as any);
+    requireAuth(ctx);
     return ctx.db.insert('tasks', {
       projectId: input.projectId,
       title: input.title,
@@ -25,10 +24,10 @@ export const createTask = mutation({
   },
 });
 
-export const listTasks = query({
+export const listTasks = authQuery({
   input: { projectId: defineRef('projects') },
   handler: async (ctx, input) => {
-    requireAuth(ctx as any);
+    requireAuth(ctx);
     return ctx.db
       .query('tasks')
       .withIndex('by_projectId', (q) => q.eq('projectId', input.projectId))
@@ -37,10 +36,10 @@ export const listTasks = query({
   },
 });
 
-export const updateTaskStatus = mutation({
+export const updateTaskStatus = authMutation({
   input: { taskId: defineRef('tasks'), status: TaskStatus },
   handler: async (ctx, input) => {
-    requireAuth(ctx as any);
+    requireAuth(ctx);
     return ctx.db.patch('tasks', input.taskId, {
       status: input.status,
     });

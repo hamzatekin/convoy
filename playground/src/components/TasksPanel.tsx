@@ -20,6 +20,7 @@ type TasksPanelProps = {
   setError: (value: string | null) => void;
   hasSession: boolean;
   client: ConvoyClient;
+  refreshTasks: () => Promise<Array<Doc<'tasks'>> | null>;
 };
 
 export default function TasksPanel({
@@ -31,6 +32,7 @@ export default function TasksPanel({
   setError,
   hasSession,
   client,
+  refreshTasks,
 }: TasksPanelProps) {
   const [taskTitle, setTaskTitle] = useState('Write kickoff brief');
   const [taskPriority, setTaskPriority] = useState<TaskPriority>('medium');
@@ -54,6 +56,7 @@ export default function TasksPanel({
         priority: taskPriority,
         status: taskStatus,
       });
+      await refreshTasks();
       setTaskTitle('Next milestone');
       setTaskPriority('medium');
       setTaskStatus('todo');
@@ -70,6 +73,7 @@ export default function TasksPanel({
     setStatus('Updating task...');
     try {
       await updateTaskStatus({ taskId, status: nextStatus });
+      await refreshTasks();
       setStatus('Task updated');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Mutation failed';

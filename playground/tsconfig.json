@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "convoy", "server"]
+  "include": ["src", "convoy"]
 }

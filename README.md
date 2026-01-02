@@ -100,7 +100,29 @@ Best practices:
 
 - Resolve auth once per request (or once per SSE subscription connection) and attach it to context.
 - Throw `convoyError('UNAUTHORIZED', ...)` or `convoyError('FORBIDDEN', ...)` to return structured errors.
+- If you use header-based auth, note that SSE cannot send custom headers; prefer cookie sessions or set `subscribe: false`.
 - Bring your own auth — Convoy does not require a hosted auth provider.
+
+Typed auth helpers:
+
+```ts
+// convoy/functions/_auth.ts
+import { convoyError, createFunctionHelpers, type Id } from 'convoy';
+import type { ServerContext } from '../_generated/server';
+
+export type AuthContext = ServerContext & { auth: { userId: Id<'users'> } | null };
+
+const helpers = createFunctionHelpers<AuthContext>();
+export const authQuery = helpers.query;
+export const authMutation = helpers.mutation;
+
+export function requireAuth(ctx: AuthContext) {
+  if (!ctx.auth?.userId) {
+    throw convoyError('UNAUTHORIZED', 'Missing session');
+  }
+  return ctx.auth;
+}
+```
 
 ---
 
@@ -196,7 +218,7 @@ import { useMutation, useQuery } from 'convoy/react';
 import { api } from '../convoy/_generated/api';
 
 const createProject = useMutation(api.projects.createProject);
-const { data } = useQuery(api.projects.listProjects, { userId }, { enabled: false });
+const { data, connectionState, isReconnecting, isStale } = useQuery(api.projects.listProjects, { userId });
 ```
 
 Direct client usage (non-React)
@@ -207,6 +229,23 @@ import { api } from '../convoy/_generated/api';
 
 const client = createConvoyClient();
 await client.mutation(api.projects.createProject, { userId, name: 'My App' });
+```
+
+Structured errors and mutation state:
+
+```ts
+import { ConvoyError } from 'convoy/client';
+import { useMutationState } from 'convoy/react';
+
+const { mutate, isLoading, error } = useMutationState(api.projects.createProject);
+
+try {
+  await mutate({ userId, name: 'My App' });
+} catch (err) {
+  if (err instanceof ConvoyError) {
+    console.log(err.code, err.message);
+  }
+}
 ```
 
 ### How reactivity works (high level)

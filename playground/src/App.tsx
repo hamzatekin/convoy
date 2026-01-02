@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+// src/App.tsx
+import { useEffect, useMemo, useState } from 'react';
 import type { Id } from 'convoy';
 import { createConvoyClient } from 'convoy/client';
 import { useQuery } from 'convoy/react';
@@ -14,18 +15,42 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<Id<'projects'> | null>(null);
   const [status, setStatus] = useState('Idle');
   const [error, setError] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<'header' | 'cookie'>('cookie');
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (authMode !== 'cookie') {
+      document.cookie = 'convoy_user=; Max-Age=0; path=/; SameSite=Lax';
+      return;
+    }
+    if (sessionUserId) {
+      document.cookie = `convoy_user=${encodeURIComponent(sessionUserId)}; path=/; SameSite=Lax`;
+      return;
+    }
+    document.cookie = 'convoy_user=; Max-Age=0; path=/; SameSite=Lax';
+  }, [authMode, sessionUserId]);
 
   const client = useMemo(() => {
     return createConvoyClient({
       fetch: (input, init) => {
         const headers = new Headers(init?.headers);
-        if (sessionUserId) {
+        if (authMode === 'header' && sessionUserId) {
           headers.set('x-convoy-user', sessionUserId);
         }
-        return fetch(input, { ...init, headers });
+        return fetch(input, { ...init, headers, credentials: init?.credentials ?? 'same-origin' });
       },
     });
-  }, [sessionUserId]);
+  }, [authMode, sessionUserId]);
+
+  const anonymousClient = useMemo(() => {
+    return createConvoyClient({
+      fetch: (input, init) => fetch(input, { ...init, credentials: 'omit' }),
+    });
+  }, []);
+
+  const shouldSubscribe = authMode === 'cookie';
 
   const {
     data: projects,
@@ -34,7 +59,16 @@ export default function App() {
     connectionState: projectsConnection,
     isReconnecting: projectsReconnecting,
     isStale: projectsStale,
-  } = useQuery(api.projects.listProjects, {}, { client, enabled: Boolean(sessionUserId) });
+    refetch: refetchProjects,
+  } = useQuery(
+    api.projects.listProjects,
+    {},
+    {
+      client,
+      enabled: Boolean(sessionUserId),
+      subscribe: shouldSubscribe,
+    },
+  );
 
   const tasksArgs = selectedProjectId ? { projectId: selectedProjectId } : null;
 
@@ -45,7 +79,12 @@ export default function App() {
     connectionState: tasksConnection,
     isReconnecting: tasksReconnecting,
     isStale: tasksStale,
-  } = useQuery(api.tasks.listTasks, tasksArgs, { client, enabled: Boolean(sessionUserId && selectedProjectId) });
+    refetch: refetchTasks,
+  } = useQuery(api.tasks.listTasks, tasksArgs, {
+    client,
+    enabled: Boolean(sessionUserId && selectedProjectId),
+    subscribe: shouldSubscribe,
+  });
 
   const {
     data: authUserId,
@@ -111,6 +150,9 @@ export default function App() {
               setStatus={setStatus}
               setError={setError}
               client={client}
+              anonymousClient={anonymousClient}
+              authMode={authMode}
+              setAuthMode={setAuthMode}
             />
             <ProjectsPanel
               hasSession={Boolean(sessionUserId)}
@@ -121,6 +163,7 @@ export default function App() {
               setStatus={setStatus}
               setError={setError}
               client={client}
+              refreshProjects={refetchProjects}
             />
           </aside>
           <section className="space-y-6">
@@ -133,6 +176,7 @@ export default function App() {
               setError={setError}
               hasSession={Boolean(sessionUserId)}
               client={client}
+              refreshTasks={refetchTasks}
             />
             <StatusPanel
               status={status}

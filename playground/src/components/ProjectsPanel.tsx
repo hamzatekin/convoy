@@ -17,6 +17,7 @@ type ProjectsPanelProps = {
   setStatus: (value: string) => void;
   setError: (value: string | null) => void;
   client: ConvoyClient;
+  refreshProjects: () => Promise<Array<Doc<'projects'>> | null>;
 };
 
 export default function ProjectsPanel({
@@ -28,6 +29,7 @@ export default function ProjectsPanel({
   setStatus,
   setError,
   client,
+  refreshProjects,
 }: ProjectsPanelProps) {
   const [projectName, setProjectName] = useState('Launch roadmap');
   const [projectDescription, setProjectDescription] = useState('');
@@ -50,6 +52,7 @@ export default function ProjectsPanel({
         status: projectStatus,
         description: projectDescription.trim() || undefined,
       });
+      await refreshProjects();
       setSelectedProjectId(id);
       setProjectName('New initiative');
       setProjectDescription('');
@@ -67,6 +70,7 @@ export default function ProjectsPanel({
     setStatus('Updating project status...');
     try {
       await updateProjectStatus({ projectId, status: nextStatus });
+      await refreshProjects();
       setStatus('Project status updated');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Mutation failed';
