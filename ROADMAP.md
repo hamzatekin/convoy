@@ -61,27 +61,27 @@ The goal of **v1** is not more features, but **stability, trust, and production 
 
 ### Schema & Deployment Workflow
 
-- [ ] Clear separation between:
+- [x] Clear separation between:
   - `convoy dev` (auto-sync, fast iteration)
   - `convoy deploy` / `convoy migrate` (explicit, safe)
-- [ ] Warnings for destructive or incompatible schema changes
-- [ ] Non-destructive defaults
-- [ ] Clear production deployment guidance
+- [x] Warnings for destructive or incompatible schema changes
+- [x] Non-destructive defaults
+- [x] Clear production deployment guidance
 
 ### Escape Hatches (Trust Builders)
 
-- [ ] Raw SQL escape hatch (`ctx.db.raw(...)`)
-- [ ] Ability to opt out of Convoy for specific tables
-- [ ] Clear guidance on mixing Convoy with traditional backends
-- [ ] Documented “how to eject” story
+- [x] Raw SQL escape hatch (`ctx.db.raw(...)`)
+- [x] Ability to opt out of Convoy for specific tables
+- [x] Clear guidance on mixing Convoy with traditional backends
+- [x] Documented “how to eject” story
 
 ### Documentation & Positioning
 
-- [ ] Clear mental model documentation
-- [ ] Data flow diagrams (simple, high-level)
-- [ ] “What Convoy is / is not”
-- [ ] Comparison with REST and Convex
-- [ ] Explicit tradeoffs and limitations
+- [x] Clear mental model documentation
+- [x] Data flow diagrams (simple, high-level)
+- [x] “What Convoy is / is not”
+- [x] Comparison with REST and Convex
+- [x] Explicit tradeoffs and limitations
 
 ---
 

@@ -47,6 +47,54 @@ Mutations are write + business logic functions. When a mutation runs, Convoy inv
 
 Convoy uses Postgres `LISTEN / NOTIFY` for change signals and Server-Sent Events (SSE) to stream authoritative query results to clients.
 
+## Mental model
+
+- Define tables + indexes once in `convoy/schema.ts`.
+- Write pure `query` functions and side-effecting `mutation` functions.
+- The server validates inputs, injects context (db + auth), and executes functions.
+- Clients call generated refs; `useQuery` stays subscribed and gets server-pushed updates.
+
+## Data flow (simplified)
+
+```
+Client useQuery  ->  /api/query/:name  ->  run query  ->  SSE stream
+Client mutation  ->  /api/mutation/:name  ->  write DB  ->  NOTIFY -> refresh SSE
+```
+
+## What Convoy is / is not
+
+Convoy is:
+
+- A typed function runtime (query/mutation) on top of your Postgres.
+- A reactive layer that keeps clients in sync via SSE.
+- A schema-first JSONB model optimized for iteration.
+
+Convoy is not:
+
+- A hosted backend or auth provider.
+- A replacement for all of your backend code (you can mix it).
+- A migration engine that drops/renames tables for you.
+
+## Comparison (short)
+
+vs REST:
+
+- Convoy gives end-to-end types and reactive subscriptions; REST gives full manual control.
+- Convoy hides routing; REST exposes explicit endpoints and verbs.
+
+vs Convex:
+
+- Convoy runs on your Postgres; Convex runs on hosted infra.
+- Convoy uses JSONB + SQL; Convex uses its own storage/engine.
+- Convoy is bring-your-own-auth; Convex provides hosted auth integrations.
+
+## Tradeoffs & limitations
+
+- SSE only (no WebSocket transport yet).
+- JSONB-first model; relational modeling is possible but less ergonomic today.
+- No destructive migrations (tables/indexes are created only).
+- Long-lived server process required (not serverless-friendly out of the box).
+
 ## Auth via request context
 
 Convoy treats auth as **request-scoped data on your context**. Export `createContext(req, base)` from `convoy/server.ts` and `convoy dev` will pick it up automatically.
@@ -211,6 +259,14 @@ This will:
 
 If `convoy/server.ts` exists, its `createContext` (and optional `configureServer`) is used automatically.
 
+Production workflow (explicit, safe):
+
+```bash
+convoy migrate
+```
+
+`convoy migrate` runs schema sync once, emits warnings for destructive or incompatible changes, and never drops tables or indexes. Use this in deploy pipelines (alias: `convoy deploy`).
+
 ### 4) Use it on the client (React)
 
 ```ts
@@ -258,6 +314,39 @@ try {
 6. Updated query results are pushed to clients
 
 The server is always the source of truth.
+
+### Escape hatches
+
+Raw SQL:
+
+```ts
+import { sql } from 'drizzle-orm';
+
+const rows = await ctx.db.raw<{ total: number }>(sql`select count(*) as total from users`);
+```
+
+Opt out of table management:
+
+```ts
+import { defineSchema, defineTable } from 'convoy';
+import { z } from 'zod';
+
+export default defineSchema({
+  audit_log: defineTable({ event: z.string() }).unmanaged(),
+});
+```
+
+Mixing Convoy with traditional backends:
+
+- Use Convoy for realtime slices (collab, dashboards) while keeping REST/GraphQL for everything else.
+- Point both systems at the same database; Convoy never drops tables and only creates what it manages.
+- You can call existing services from Convoy functions (e.g. via HTTP or shared modules).
+
+Eject story:
+
+- Your data stays in Postgres; you can stop the Convoy server without losing any rows.
+- Queries and mutations are just TypeScript functions — move them into another backend or reuse them in APIs.
+- You can keep generated types (`convoy/_generated`) or replace them with your own client logic.
 
 ### Roadmap (high level)
 

@@ -7,10 +7,18 @@ type StatusStream = {
   isStale: boolean;
 };
 
+type SqlStats = {
+  projects: number;
+  tasks: number;
+};
+
 type StatusPanelProps = {
   status: string;
   error: string | null;
   streams: StatusStream[];
+  sqlStats: SqlStats | null;
+  sqlStatsLoading: boolean;
+  unmanagedTables: string[];
 };
 
 const stateStyles: Record<QueryConnectionState, string> = {
@@ -20,7 +28,21 @@ const stateStyles: Record<QueryConnectionState, string> = {
   disabled: 'bg-slate-200 text-slate-700',
 };
 
-export default function StatusPanel({ status, error, streams }: StatusPanelProps) {
+export default function StatusPanel({
+  status,
+  error,
+  streams,
+  sqlStats,
+  sqlStatsLoading,
+  unmanagedTables,
+}: StatusPanelProps) {
+  const unmanagedLabel = unmanagedTables.length > 0 ? unmanagedTables.join(', ') : 'None';
+  const statsLabel = sqlStatsLoading
+    ? 'Loading raw SQL...'
+    : sqlStats
+      ? `${sqlStats.projects} boards • ${sqlStats.tasks} cards`
+      : 'Unavailable';
+
   return (
     <footer className="rounded-2xl bg-white/90 p-5 text-sm shadow-sm ring-1 ring-slate-200/70">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -44,6 +66,17 @@ export default function StatusPanel({ status, error, streams }: StatusPanelProps
       {error ? (
         <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</div>
       ) : null}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Raw SQL totals</p>
+          <p className="mt-2 text-sm font-semibold text-slate-800">{statsLabel}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Unmanaged tables</p>
+          <p className="mt-2 text-sm font-semibold text-slate-800">{unmanagedLabel}</p>
+          <p className="mt-1 text-[11px] text-slate-400">Convoy skips table creation.</p>
+        </div>
+      </div>
     </footer>
   );
 }

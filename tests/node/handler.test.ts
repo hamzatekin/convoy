@@ -136,12 +136,13 @@ describe('createNodeHandler', () => {
   });
 
   it('resolves auth context once per request', async () => {
-    const createContext = vi.fn().mockResolvedValue(createTestContext({ userId: 'user-1' }));
-    const handler = createNodeHandler({
+    type AuthContext = { userId: string };
+    const createContext = vi.fn().mockResolvedValue({ userId: 'user-1' } satisfies AuthContext);
+    const handler = createNodeHandler<AuthContext>({
       queries: {
-        whoami: query({
+        whoami: query<AuthContext>({
           input: {},
-          handler: (ctx) => (ctx as { userId: string }).userId,
+          handler: (ctx) => ctx.userId,
         }),
       },
       mutations: {},

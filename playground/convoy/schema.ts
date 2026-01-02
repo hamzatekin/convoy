@@ -32,6 +32,10 @@ const schema = defineSchema({
   })
     .index('by_projectId', ['projectId'])
     .index('by_status', ['status']),
+  audit_log: defineTable({
+    event: z.string(),
+    createdAt: z.number(),
+  }).unmanaged(),
 });
 
 export default schema;

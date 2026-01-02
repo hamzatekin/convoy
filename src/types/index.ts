@@ -15,6 +15,7 @@ export type TableDefinition<
   name?: string;
   schema: z.ZodObject<TShape>;
   indexes?: TIndexes;
+  managed?: boolean;
   validate: (value: unknown) => z.output<z.ZodObject<TShape>>;
   isValid: (value: unknown) => value is z.output<z.ZodObject<TShape>>;
 };

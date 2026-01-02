@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 type CliOptions = {
   rootDir: string;
   schemaPath?: string;
-  command: 'dev';
+  command: 'dev' | 'migrate' | 'deploy';
   watch: boolean;
   serve: boolean;
 };
@@ -30,6 +30,19 @@ export default schema;
 const FUNCTIONS_DIRNAME = 'functions';
 const GENERATED_DIRNAME = '_generated';
 const USER_SERVER_CANDIDATES = ['server.ts', 'server.tsx', 'server.js', 'server.mjs', 'server.cjs'];
+const SCHEMA_SNAPSHOT_FILENAME = 'schema.snapshot.json';
+
+type SchemaSnapshot = {
+  version: 1;
+  generatedAt: string;
+  tables: Record<
+    string,
+    {
+      name: string;
+      indexes: Record<string, string[]>;
+    }
+  >;
+};
 
 type FunctionExport = {
   kind: 'query' | 'mutation';
@@ -50,7 +63,13 @@ type ModuleInfo = {
   pathSegments: string[];
 };
 
-function parseArgs(argv: string[]): CliOptions {
+type SyncSettings = {
+  allowCreateDatabase: boolean;
+  warnOnSchemaChanges: boolean;
+  modeLabel: string;
+};
+
+export function parseArgs(argv: string[]): CliOptions {
   const args = [...argv];
   let command: CliOptions['command'] = 'dev';
   let rootDir = process.cwd();
@@ -64,6 +83,10 @@ function parseArgs(argv: string[]): CliOptions {
       command = 'dev';
     } else if (maybeCommand === 'init') {
       command = 'dev';
+    } else if (maybeCommand === 'migrate') {
+      command = 'migrate';
+    } else if (maybeCommand === 'deploy') {
+      command = 'deploy';
     } else if (maybeCommand) {
       throw new Error(`Unknown command: ${maybeCommand}`);
     }
@@ -117,13 +140,25 @@ function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg}`);
   }
 
+  if (command !== 'dev') {
+    watchMode = false;
+    serveMode = false;
+  }
+
   return {
     command,
     rootDir,
     schemaPath,
     watch: watchMode,
-    serve: serveMode ?? watchMode,
+    serve: command === 'dev' ? (serveMode ?? watchMode) : false,
   };
+}
+
+export function resolveCommandSettings(command: CliOptions['command']): SyncSettings {
+  if (command === 'dev') {
+    return { allowCreateDatabase: true, warnOnSchemaChanges: false, modeLabel: 'dev' };
+  }
+  return { allowCreateDatabase: false, warnOnSchemaChanges: true, modeLabel: command };
 }
 
 function toImportPath(fromDir: string, filePath: string, options: { stripExtension?: boolean } = {}): string {
@@ -206,6 +241,77 @@ async function resolveNodeRuntimeImport(rootDir: string, generatedDir: string): 
   }
 
   return 'convoy/node';
+}
+
+export function buildSchemaSnapshot(schema: Record<string, any>): SchemaSnapshot {
+  const tables: SchemaSnapshot['tables'] = {};
+  for (const [key, table] of Object.entries(schema)) {
+    if (!table || typeof table !== 'object') {
+      continue;
+    }
+    const name = String(table.name ?? key);
+    const indexes: Record<string, string[]> = {};
+    const tableIndexes = table.indexes ?? {};
+    for (const [indexName, fields] of Object.entries(tableIndexes)) {
+      if (!Array.isArray(fields)) {
+        continue;
+      }
+      indexes[indexName] = fields.map((field) => String(field));
+    }
+    tables[name] = { name, indexes };
+  }
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    tables,
+  };
+}
+
+export function diffSchemaSnapshots(prev: SchemaSnapshot | null, next: SchemaSnapshot): string[] {
+  if (!prev) {
+    return [];
+  }
+  const warnings: string[] = [];
+  for (const [tableName, prevTable] of Object.entries(prev.tables)) {
+    const nextTable = next.tables[tableName];
+    if (!nextTable) {
+      warnings.push(`Table "${tableName}" was removed from schema (data will remain).`);
+      continue;
+    }
+    const prevIndexes = prevTable.indexes ?? {};
+    const nextIndexes = nextTable.indexes ?? {};
+    for (const [indexName, prevFields] of Object.entries(prevIndexes)) {
+      const nextFields = nextIndexes[indexName];
+      if (!nextFields) {
+        warnings.push(`Index "${tableName}.${indexName}" was removed from schema (not dropped automatically).`);
+        continue;
+      }
+      if (JSON.stringify(prevFields) !== JSON.stringify(nextFields)) {
+        warnings.push(
+          `Index "${tableName}.${indexName}" changed (was [${prevFields.join(', ')}], now [${nextFields.join(', ')}]).`,
+        );
+      }
+    }
+  }
+  return warnings;
+}
+
+async function readSchemaSnapshot(filePath: string): Promise<SchemaSnapshot | null> {
+  try {
+    const raw = await readFile(filePath, 'utf8');
+    const parsed = JSON.parse(raw) as SchemaSnapshot;
+    if (!parsed || typeof parsed !== 'object' || parsed.version !== 1) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeSchemaSnapshot(filePath: string, snapshot: SchemaSnapshot): Promise<void> {
+  const content = `${JSON.stringify(snapshot, null, 2)}\n`;
+  await writeFileIfChanged(filePath, content);
 }
 
 async function listFunctionFiles(dir: string): Promise<string[]> {
@@ -810,7 +916,7 @@ function loadEnvFiles(rootDir: string): void {
   }
 }
 
-async function ensureDatabase(databaseUrl: string): Promise<void> {
+async function ensureDatabase(databaseUrl: string, options: { createIfMissing: boolean }): Promise<void> {
   const targetUrl = new URL(databaseUrl);
   const dbName = decodeURIComponent(targetUrl.pathname.replace(/^\//, ''));
   if (!dbName) {
@@ -824,6 +930,10 @@ async function ensureDatabase(databaseUrl: string): Promise<void> {
   await adminClient.connect();
   const exists = await adminClient.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName]);
   if (exists.rowCount === 0) {
+    if (!options.createIfMissing) {
+      await adminClient.end();
+      throw new Error(`Database "${dbName}" does not exist. Create it before running convoy migrate.`);
+    }
     await adminClient.query(`CREATE DATABASE ${quoteIdent(dbName)}`);
   }
   await adminClient.end();
@@ -838,6 +948,9 @@ async function ensureTables(databaseUrl: string, schema: Record<string, any>): P
   for (const [key, table] of Object.entries(schema)) {
     if (!table || typeof table !== 'object') {
       throw new Error(`Invalid table definition for "${key}"`);
+    }
+    if ((table as { managed?: boolean }).managed === false) {
+      continue;
     }
     const tableName = String(table.name ?? key);
     await client.query(
@@ -871,10 +984,12 @@ function resolveSchemaPath(options: CliOptions, rootDir: string): { convoyDir: s
   return { convoyDir, schemaPath };
 }
 
-async function syncOnce(options: CliOptions, cacheBust = false): Promise<void> {
+async function syncOnce(options: CliOptions, settings: SyncSettings, cacheBust = false): Promise<void> {
   const rootDir = path.resolve(options.rootDir);
   const { convoyDir, schemaPath } = resolveSchemaPath(options, rootDir);
   await mkdir(convoyDir, { recursive: true });
+  const generatedDir = path.join(convoyDir, GENERATED_DIRNAME);
+  await mkdir(generatedDir, { recursive: true });
 
   const schemaExists = await pathExists(schemaPath);
   if (!schemaExists) {
@@ -889,7 +1004,19 @@ async function syncOnce(options: CliOptions, cacheBust = false): Promise<void> {
   }
 
   const schema = await loadSchemaModule(schemaPath, cacheBust);
-  await ensureDatabase(databaseUrl);
+  const snapshotPath = path.join(generatedDir, SCHEMA_SNAPSHOT_FILENAME);
+  const previousSnapshot = await readSchemaSnapshot(snapshotPath);
+  const nextSnapshot = buildSchemaSnapshot(schema);
+  const warnings = diffSchemaSnapshots(previousSnapshot, nextSnapshot);
+  if (settings.warnOnSchemaChanges && warnings.length > 0) {
+    console.warn(`Schema warnings (${settings.modeLabel}):`);
+    for (const warning of warnings) {
+      console.warn(`- ${warning}`);
+    }
+    console.warn('Convoy never drops tables or indexes automatically.');
+  }
+
+  await ensureDatabase(databaseUrl, { createIfMissing: settings.allowCreateDatabase });
   const tables = await ensureTables(databaseUrl, schema);
   console.log(`Synced ${tables.length} table(s): ${tables.join(', ')}`);
   await generateServer(rootDir, schemaPath);
@@ -897,6 +1024,7 @@ async function syncOnce(options: CliOptions, cacheBust = false): Promise<void> {
   await generateApi(rootDir, { cacheBust });
   await generateHttpServer(rootDir, schemaPath);
   await generateDataModelTypes(rootDir, schemaPath);
+  await writeSchemaSnapshot(snapshotPath, nextSnapshot);
   console.log('Generated Convoy bindings');
 }
 
@@ -1018,7 +1146,8 @@ async function watchConvoyDir(convoyDir: string, onChange: (filePath: string | n
 async function watchCommand(options: CliOptions): Promise<void> {
   const rootDir = path.resolve(options.rootDir);
   const { convoyDir } = resolveSchemaPath(options, rootDir);
-  await syncOnce(options, true);
+  const settings = resolveCommandSettings(options.command);
+  await syncOnce(options, settings, true);
 
   let pendingTimer: NodeJS.Timeout | null = null;
   let running = false;
@@ -1059,7 +1188,7 @@ async function watchCommand(options: CliOptions): Promise<void> {
     try {
       do {
         rerun = false;
-        await syncOnce(options, true);
+        await syncOnce(options, settings, true);
       } while (rerun);
       succeeded = true;
     } catch (error) {
@@ -1100,7 +1229,8 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       await watchCommand(options);
       return;
     }
-    await syncOnce(options);
+    const settings = resolveCommandSettings(options.command);
+    await syncOnce(options, settings);
     if (options.serve) {
       const rootDir = path.resolve(options.rootDir);
       const server = await startDevServer(rootDir);
@@ -1110,6 +1240,12 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
         });
       }
     }
+    return;
+  }
+
+  if (options.command === 'migrate' || options.command === 'deploy') {
+    const settings = resolveCommandSettings(options.command);
+    await syncOnce(options, settings);
     return;
   }
 

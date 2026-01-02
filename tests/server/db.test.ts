@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { sql } from 'drizzle-orm';
 import { defineSchema } from '../../src/schema/define-schema.ts';
 import { defineTable } from '../../src/schema/define-table.ts';
 import { createDb } from '../../src/server.ts';
@@ -121,5 +122,15 @@ describe('createDb', () => {
       'Field "age" is not part of index "by_name"',
     );
     expect(() => db.query('users').order('asc', 'unknown' as any)).toThrow('Unknown field "unknown"');
+  });
+
+  it('executes raw queries', async () => {
+    const { runner, calls } = createRunner({ rows: [{ total: 2 }] });
+    const db = createDb(runner, schema);
+
+    const rows = await db.raw<{ total: number }>(sql`select 2 as total`);
+
+    expect(rows).toEqual([{ total: 2 }]);
+    expect(calls).toHaveLength(1);
   });
 });

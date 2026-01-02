@@ -228,6 +228,7 @@ export function createDb<TTables extends SchemaTables>(
     ): Promise<RowFor<TTables, TableNameFromId<TTables, TId>> | null>;
   };
   query: <TTableName extends keyof TTables>(table: TTableName) => QueryBuilder<TTables, TTableName>;
+  raw: <TRow extends Record<string, unknown> = Record<string, unknown>>(query: SQL) => Promise<TRow[]>;
 } {
   function tableDefinitionByKey(tableKey: string) {
     const table = schema[tableKey as keyof TTables];
@@ -284,6 +285,10 @@ export function createDb<TTables extends SchemaTables>(
   async function run<T extends Record<string, unknown>>(query: SQL): Promise<T[]> {
     const result = await runner.execute(query);
     return normalizeRows<T>(result);
+  }
+
+  async function raw<TRow extends Record<string, unknown> = Record<string, unknown>>(query: SQL): Promise<TRow[]> {
+    return run<TRow>(query);
   }
 
   async function insert<TTableName extends keyof TTables>(
@@ -450,6 +455,7 @@ export function createDb<TTables extends SchemaTables>(
     get,
     patch,
     query: queryTable,
+    raw,
   };
 }
 

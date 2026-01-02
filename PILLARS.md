@@ -27,13 +27,19 @@ Convex-style developer experience on top of user-owned Postgres, with JSONB as t
 - One command for dev: watch + generate + run server.
 - Single Postgres database (no hosted backend dependency).
 
-5. Extensible sync path
+5. Reactive queries by default
 
-- V1 ships without sync/realtime.
-- Later: ElectricSQL for syncing and offline support.
+- SSE subscriptions with server-pushed updates.
+- Postgres `LISTEN / NOTIFY` invalidation.
+
+6. Escape hatches
+
+- Raw SQL access when needed.
+- Opt-out for unmanaged tables.
 
 ## V1 Non-goals
 
 - JSONB to relational promotion/migrations
 - Advanced auth/ACL framework (basic context only)
-- Realtime invalidation and offline support
+- Built-in destructive migrations
+- Offline-first sync

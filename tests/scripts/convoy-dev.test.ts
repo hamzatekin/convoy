@@ -34,7 +34,8 @@ describe('generateHttpServer', () => {
 
     const httpPath = path.join(root, 'convoy', '_generated', 'http.ts');
     const content = await readFile(httpPath, 'utf8');
-    expect(content).toContain('const resolveContext = options.createContext');
+    expect(content).toContain('const overrideContext = options.createContext');
+    expect(content).toContain('const resolveContext = overrideContext');
     expect(content).toContain('createContext(db)');
     expect(content).not.toContain('userServer');
   });

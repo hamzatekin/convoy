@@ -87,6 +87,12 @@ export default function App() {
   });
 
   const {
+    data: sqlStats,
+    error: statsError,
+    isLoading: statsLoading,
+  } = useQuery(api.stats.overview, {}, { client, enabled: Boolean(sessionUserId), subscribe: shouldSubscribe });
+
+  const {
     data: authUserId,
     error: authError,
     isLoading: authLoading,
@@ -95,7 +101,8 @@ export default function App() {
   const projectsData: Array<Doc<'projects'>> = projects ?? [];
   const tasksData: Array<Doc<'tasks'>> = tasks ?? [];
   const selectedProject = projectsData.find((project) => project.id === selectedProjectId) ?? null;
-  const combinedError = error ?? projectsError?.message ?? tasksError?.message ?? authError?.message ?? null;
+  const combinedError =
+    error ?? projectsError?.message ?? tasksError?.message ?? statsError?.message ?? authError?.message ?? null;
   const authStatus = sessionUserId
     ? authLoading
       ? 'Verifying session...'
@@ -195,6 +202,9 @@ export default function App() {
                   isStale: tasksStale,
                 },
               ]}
+              sqlStats={sqlStats ?? null}
+              sqlStatsLoading={statsLoading}
+              unmanagedTables={['audit_log']}
             />
           </section>
         </div>

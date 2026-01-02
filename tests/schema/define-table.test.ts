@@ -40,4 +40,12 @@ describe('defineTable', () => {
       by_count: ['count'],
     });
   });
+
+  it('marks tables as unmanaged when opted out', () => {
+    const table = defineTable({
+      name: z.string(),
+    }).unmanaged();
+
+    expect(table.managed).toBe(false);
+  });
 });

@@ -9,6 +9,7 @@ export type TableBuilder<TShape extends TableShape, TIndexes extends TableIndexe
     name: TName,
     fields: TFields,
   ) => TableBuilder<TShape, TIndexes & Record<TName, TFields>>;
+  unmanaged: () => TableBuilder<TShape, TIndexes>;
 };
 
 export function defineTable<TShape extends TableShape>(shape: TShape): TableBuilder<TShape, {}> {
@@ -17,11 +18,16 @@ export function defineTable<TShape extends TableShape>(shape: TShape): TableBuil
   const table: TableBuilder<TShape, {}> = {
     schema,
     indexes,
+    managed: true,
     validate: (value) => schema.parse(value),
     isValid: (value): value is z.output<typeof schema> => schema.safeParse(value).success,
     index: <TName extends string, TFields extends readonly (keyof TShape & string)[]>(name: TName, fields: TFields) => {
       indexes[name] = fields;
       return table as TableBuilder<TShape, Record<TName, TFields>>;
+    },
+    unmanaged: () => {
+      table.managed = false;
+      return table;
     },
   };
   return table;
