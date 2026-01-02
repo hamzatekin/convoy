@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Id } from 'convoy';
+import { createConvoyClient } from 'convoy/client';
 import { useQuery } from 'convoy/react';
 import { api } from '../convoy/_generated/api.ts';
 import type { Doc } from '../convoy/_generated/dataModel';
@@ -9,12 +10,23 @@ import TasksPanel from './components/TasksPanel';
 import StatusPanel from './components/StatusPanel';
 
 export default function App() {
-  const [userId, setUserId] = useState<Id<'users'> | null>(null);
+  const [sessionUserId, setSessionUserId] = useState<Id<'users'> | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<Id<'projects'> | null>(null);
   const [status, setStatus] = useState('Idle');
   const [error, setError] = useState<string | null>(null);
 
-  const projectsArgs = userId ? { userId } : null;
+  const client = useMemo(() => {
+    return createConvoyClient({
+      fetch: (input, init) => {
+        const headers = new Headers(init?.headers);
+        if (sessionUserId) {
+          headers.set('x-convoy-user', sessionUserId);
+        }
+        return fetch(input, { ...init, headers });
+      },
+    });
+  }, [sessionUserId]);
+
   const {
     data: projects,
     error: projectsError,
@@ -22,7 +34,7 @@ export default function App() {
     connectionState: projectsConnection,
     isReconnecting: projectsReconnecting,
     isStale: projectsStale,
-  } = useQuery(api.projects.listProjects, projectsArgs);
+  } = useQuery(api.projects.listProjects, {}, { client, enabled: Boolean(sessionUserId) });
 
   const tasksArgs = selectedProjectId ? { projectId: selectedProjectId } : null;
 
@@ -33,12 +45,25 @@ export default function App() {
     connectionState: tasksConnection,
     isReconnecting: tasksReconnecting,
     isStale: tasksStale,
-  } = useQuery(api.tasks.listTasks, tasksArgs);
+  } = useQuery(api.tasks.listTasks, tasksArgs, { client, enabled: Boolean(sessionUserId && selectedProjectId) });
+
+  const {
+    data: authUserId,
+    error: authError,
+    isLoading: authLoading,
+  } = useQuery(api.users.whoami, {}, { client, enabled: Boolean(sessionUserId), subscribe: false });
 
   const projectsData: Array<Doc<'projects'>> = projects ?? [];
   const tasksData: Array<Doc<'tasks'>> = tasks ?? [];
   const selectedProject = projectsData.find((project) => project.id === selectedProjectId) ?? null;
-  const combinedError = error ?? projectsError?.message ?? tasksError?.message ?? null;
+  const combinedError = error ?? projectsError?.message ?? tasksError?.message ?? authError?.message ?? null;
+  const authStatus = sessionUserId
+    ? authLoading
+      ? 'Verifying session...'
+      : authError
+        ? 'Session rejected'
+        : `Signed in as ${authUserId ?? sessionUserId}`
+    : 'No active session';
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -79,15 +104,23 @@ export default function App() {
 
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
           <aside className="space-y-6">
-            <SessionPanel userId={userId} setUserId={setUserId} setStatus={setStatus} setError={setError} />
+            <SessionPanel
+              sessionUserId={sessionUserId}
+              setSessionUserId={setSessionUserId}
+              authStatus={authStatus}
+              setStatus={setStatus}
+              setError={setError}
+              client={client}
+            />
             <ProjectsPanel
-              userId={userId}
+              hasSession={Boolean(sessionUserId)}
               projects={projectsData}
               projectsLoading={projectsLoading}
               selectedProjectId={selectedProjectId}
               setSelectedProjectId={setSelectedProjectId}
               setStatus={setStatus}
               setError={setError}
+              client={client}
             />
           </aside>
           <section className="space-y-6">
@@ -98,6 +131,8 @@ export default function App() {
               tasksLoading={tasksLoading}
               setStatus={setStatus}
               setError={setError}
+              hasSession={Boolean(sessionUserId)}
+              client={client}
             />
             <StatusPanel
               status={status}

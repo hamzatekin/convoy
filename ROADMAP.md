@@ -51,13 +51,13 @@ The goal of **v1** is not more features, but **stability, trust, and production 
 
 ### Auth as First-Class Context (Not a Service)
 
-- [ ] Official `createContext(req)` pattern
-- [ ] Auth resolved once per request
-- [ ] Example integrations:
-  - JWT
-  - Cookie-based sessions
-- [ ] Documentation for auth best practices
-- [ ] No auth lock-in or hosted auth dependency
+- [x] Official `createContext(req)` pattern
+- [x] Auth resolved once per request
+- [x] Example integrations:
+  - [x] JWT
+  - [x] Cookie-based sessions
+- [x] Documentation for auth best practices
+- [x] No auth lock-in or hosted auth dependency
 
 ### Schema & Deployment Workflow
 

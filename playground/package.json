@@ -5,7 +5,7 @@
   "scripts": {
     "convoy:dev": "node ../bin/convoy.js dev --root .",
     "convoy:once": "node ../bin/convoy.js dev --root . --once",
-    "convoy:server": "node --import tsx convoy/_generated/http.ts",
+    "convoy:server": "node ../bin/convoy.js dev --root . --no-watch --serve",
     "typecheck": "tsc --noEmit",
     "dev": "vite",
     "build": "vite build",

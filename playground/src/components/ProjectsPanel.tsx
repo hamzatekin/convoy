@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Id } from 'convoy';
+import type { ConvoyClient } from 'convoy/client';
 import { useMutation } from 'convoy/react';
 import type { Doc } from '../../convoy/_generated/dataModel';
 import { api } from '../../convoy/_generated/api.ts';
@@ -8,42 +9,43 @@ const PROJECT_STATUSES = ['planning', 'active', 'blocked', 'done'] as const;
 type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 type ProjectsPanelProps = {
-  userId: Id<'users'> | null;
+  hasSession: boolean;
   projects: Array<Doc<'projects'>>;
   projectsLoading: boolean;
   selectedProjectId: Id<'projects'> | null;
   setSelectedProjectId: (value: Id<'projects'> | null) => void;
   setStatus: (value: string) => void;
   setError: (value: string | null) => void;
+  client: ConvoyClient;
 };
 
 export default function ProjectsPanel({
-  userId,
+  hasSession,
   projects,
   projectsLoading,
   selectedProjectId,
   setSelectedProjectId,
   setStatus,
   setError,
+  client,
 }: ProjectsPanelProps) {
   const [projectName, setProjectName] = useState('Launch roadmap');
   const [projectDescription, setProjectDescription] = useState('');
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('active');
 
-  const createProject = useMutation(api.projects.createProject);
-  const updateProjectStatus = useMutation(api.projects.updateProjectStatus);
+  const createProject = useMutation(api.projects.createProject, { client });
+  const updateProjectStatus = useMutation(api.projects.updateProjectStatus, { client });
 
-  const canCreateProject = Boolean(userId && projectName.trim().length > 0);
+  const canCreateProject = Boolean(hasSession && projectName.trim().length > 0);
 
   async function handleCreateProject() {
-    if (!userId) {
+    if (!hasSession) {
       return;
     }
     setError(null);
     setStatus('Creating project...');
     try {
       const id = await createProject({
-        userId,
         name: projectName.trim(),
         status: projectStatus,
         description: projectDescription.trim() || undefined,
@@ -90,7 +92,7 @@ export default function ProjectsPanel({
         <span className="text-xs text-slate-500">{projectsLoading ? 'Syncing...' : `${projects.length} board(s)`}</span>
       </div>
 
-      {!userId ? (
+      {!hasSession ? (
         <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
           Create a workspace user to start adding boards.
         </div>

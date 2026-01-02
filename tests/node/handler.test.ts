@@ -135,6 +135,35 @@ describe('createNodeHandler', () => {
     );
   });
 
+  it('resolves auth context once per request', async () => {
+    const createContext = vi.fn().mockResolvedValue(createTestContext({ userId: 'user-1' }));
+    const handler = createNodeHandler({
+      queries: {
+        whoami: query({
+          input: {},
+          handler: (ctx) => (ctx as { userId: string }).userId,
+        }),
+      },
+      mutations: {},
+      createContext,
+    });
+    const { req, send } = createRequest({
+      method: 'POST',
+      url: '/api/query/whoami',
+      body: JSON.stringify({}),
+    });
+    const res = createResponse();
+
+    const handledPromise = handler(req, res);
+    send();
+    const handled = await handledPromise;
+
+    expect(handled).toBe(true);
+    expect(createContext).toHaveBeenCalledTimes(1);
+    expect(createContext).toHaveBeenCalledWith(req);
+    expect(JSON.parse(res.body)).toEqual({ ok: true, data: 'user-1' });
+  });
+
   it('rejects invalid json bodies', async () => {
     const handler = createNodeHandler({
       queries: {

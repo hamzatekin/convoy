@@ -14,7 +14,8 @@ function resolveTsxArgs() {
 }
 
 if (isBun) {
-  await import('../scripts/convoy-dev.ts');
+  const { runCli } = await import('../scripts/convoy-dev.ts');
+  await runCli(args);
 } else {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const scriptPath = path.join(here, '..', 'scripts', 'convoy-dev.ts');

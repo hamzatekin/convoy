@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Id } from 'convoy';
+import type { ConvoyClient } from 'convoy/client';
 import { useMutation } from 'convoy/react';
 import type { Doc } from '../../convoy/_generated/dataModel';
 import { api } from '../../convoy/_generated/api.ts';
@@ -17,6 +18,8 @@ type TasksPanelProps = {
   tasksLoading: boolean;
   setStatus: (value: string) => void;
   setError: (value: string | null) => void;
+  hasSession: boolean;
+  client: ConvoyClient;
 };
 
 export default function TasksPanel({
@@ -26,15 +29,17 @@ export default function TasksPanel({
   tasksLoading,
   setStatus,
   setError,
+  hasSession,
+  client,
 }: TasksPanelProps) {
   const [taskTitle, setTaskTitle] = useState('Write kickoff brief');
   const [taskPriority, setTaskPriority] = useState<TaskPriority>('medium');
   const [taskStatus, setTaskStatus] = useState<TaskStatus>('todo');
 
-  const createTask = useMutation(api.tasks.createTask);
-  const updateTaskStatus = useMutation(api.tasks.updateTaskStatus);
+  const createTask = useMutation(api.tasks.createTask, { client });
+  const updateTaskStatus = useMutation(api.tasks.updateTaskStatus, { client });
 
-  const canCreateTask = Boolean(selectedProjectId && taskTitle.trim().length > 0);
+  const canCreateTask = Boolean(hasSession && selectedProjectId && taskTitle.trim().length > 0);
 
   async function handleCreateTask() {
     if (!selectedProjectId) {

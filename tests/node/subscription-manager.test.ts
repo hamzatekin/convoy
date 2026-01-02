@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createQuerySubscriptionManager } from '../../src/node.ts';
 import { createContext, query } from '../../src/server.ts';
@@ -79,5 +79,41 @@ describe('createQuerySubscriptionManager', () => {
     expect(res2.body).toContain('Too many subscriptions');
 
     res1.end();
+  });
+
+  it('resolves auth context once per subscription', async () => {
+    type AuthContext = { token: string };
+    const createContext = vi.fn().mockResolvedValue({ token: 'auth-token' } satisfies AuthContext);
+    const manager = createQuerySubscriptionManager<AuthContext>({
+      queries: {
+        'auth.me': query<AuthContext>({
+          input: {},
+          handler: (ctx) => ctx.token,
+        }),
+      },
+      createContext,
+      maxSubscriptions: 2,
+      heartbeatMs: 0,
+    });
+
+    const url = `/api/subscribe?name=auth.me&args=${encodeURIComponent(JSON.stringify({}))}`;
+    const res = createResponse();
+    manager.subscribe(createRequest(url), res);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(createContext).toHaveBeenCalledTimes(1);
+
+    manager.refreshAll();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(createContext).toHaveBeenCalledTimes(1);
+
+    const dataLines = res.body
+      .split('\n')
+      .filter((line) => line.startsWith('data: '))
+      .map((line) => line.slice('data: '.length));
+    const lastPayload = dataLines[dataLines.length - 1];
+    expect(lastPayload).toBeTruthy();
+    const parsed = JSON.parse(lastPayload);
+    expect(parsed.data).toBe('auth-token');
   });
 });
