@@ -91,88 +91,9 @@ vs Convex:
 ## Tradeoffs & limitations
 
 - SSE only (no WebSocket transport yet).
-- JSONB-first model; relational modeling is possible but less ergonomic today.
+- JSONB-first model
 - No destructive migrations (tables/indexes are created only).
 - Long-lived server process required (not serverless-friendly out of the box).
-
-## Auth via request context
-
-Convoy treats auth as **request-scoped data on your context**. Export `createContext(req, base)` from `convoy/server.ts` and `convoy dev` will pick it up automatically.
-
-```ts
-// convoy/server.ts
-import type { IncomingMessage } from 'node:http';
-import type { ServerContext } from './_generated/server';
-import { convoyError } from 'convoy';
-
-export async function createContext(req: IncomingMessage, base: ServerContext) {
-  const token = req.headers.authorization?.replace(/^Bearer /, '');
-  if (!token) {
-    throw convoyError('UNAUTHORIZED', 'Missing token');
-  }
-  const user = await verifyJwt(token);
-  return { ...base, auth: { userId: user.sub } };
-}
-```
-
-Cookie session example:
-
-```ts
-export async function createContext(req: IncomingMessage, base: ServerContext) {
-  const cookie = req.headers.cookie ?? '';
-  const sessionId = cookie.split('session=')[1]?.split(';')[0];
-  if (!sessionId) {
-    throw convoyError('UNAUTHORIZED', 'Missing session');
-  }
-  const session = await loadSession(sessionId);
-  return { ...base, auth: { userId: session.userId } };
-}
-```
-
-Optional server hook:
-
-```ts
-export function configureServer({ server }) {
-  server.on('request', (_req, _res) => {
-    // add custom logging or headers
-  });
-}
-```
-
-Best DX pattern (recommended):
-
-1. Default: generated server entry (zero config). CLI generates `convoy/_generated/http.ts` with a default `createContext` that wires the DB, and `npx convoy dev` just works.
-2. Optional: user-defined server entry (advanced). Create `convoy/server.ts` and export `createContext(req, base)` (and optionally `configureServer`); the CLI auto-detects it and uses it.
-
-Best practices:
-
-- Resolve auth once per request (or once per SSE subscription connection) and attach it to context.
-- Throw `convoyError('UNAUTHORIZED', ...)` or `convoyError('FORBIDDEN', ...)` to return structured errors.
-- If you use header-based auth, note that SSE cannot send custom headers; prefer cookie sessions or set `subscribe: false`.
-- Bring your own auth — Convoy does not require a hosted auth provider.
-
-Typed auth helpers:
-
-```ts
-// convoy/functions/_auth.ts
-import { convoyError, createFunctionHelpers, type Id } from 'convoy';
-import type { ServerContext } from '../_generated/server';
-
-export type AuthContext = ServerContext & { auth: { userId: Id<'users'> } | null };
-
-const helpers = createFunctionHelpers<AuthContext>();
-export const authQuery = helpers.query;
-export const authMutation = helpers.mutation;
-
-export function requireAuth(ctx: AuthContext) {
-  if (!ctx.auth?.userId) {
-    throw convoyError('UNAUTHORIZED', 'Missing session');
-  }
-  return ctx.auth;
-}
-```
-
----
 
 ## Quickstart
 
@@ -304,6 +225,87 @@ try {
 }
 ```
 
+---
+
+## Auth via request context
+
+Convoy treats auth as **request-scoped data on your context**. Export `createContext(req, base)` from `convoy/server.ts` and `convoy dev` will pick it up automatically.
+
+```ts
+// convoy/server.ts
+import type { IncomingMessage } from 'node:http';
+import type { ServerContext } from './_generated/server';
+import { convoyError } from 'convoy';
+
+export async function createContext(req: IncomingMessage, base: ServerContext) {
+  const token = req.headers.authorization?.replace(/^Bearer /, '');
+  if (!token) {
+    throw convoyError('UNAUTHORIZED', 'Missing token');
+  }
+  const user = await verifyJwt(token);
+  return { ...base, auth: { userId: user.sub } };
+}
+```
+
+Cookie session example:
+
+```ts
+export async function createContext(req: IncomingMessage, base: ServerContext) {
+  const cookie = req.headers.cookie ?? '';
+  const sessionId = cookie.split('session=')[1]?.split(';')[0];
+  if (!sessionId) {
+    throw convoyError('UNAUTHORIZED', 'Missing session');
+  }
+  const session = await loadSession(sessionId);
+  return { ...base, auth: { userId: session.userId } };
+}
+```
+
+Optional server hook:
+
+```ts
+export function configureServer({ server }) {
+  server.on('request', (_req, _res) => {
+    // add custom logging or headers
+  });
+}
+```
+
+Best DX pattern (recommended):
+
+1. Default: generated server entry (zero config). CLI generates `convoy/_generated/http.ts` with a default `createContext` that wires the DB, and `npx convoy dev` just works.
+2. Optional: user-defined server entry (advanced). Create `convoy/server.ts` and export `createContext(req, base)` (and optionally `configureServer`); the CLI auto-detects it and uses it.
+
+Best practices:
+
+- Resolve auth once per request (or once per SSE subscription connection) and attach it to context.
+- Throw `convoyError('UNAUTHORIZED', ...)` or `convoyError('FORBIDDEN', ...)` to return structured errors.
+- If you use header-based auth, note that SSE cannot send custom headers; prefer cookie sessions or set `subscribe: false`.
+- Bring your own auth — Convoy does not require a hosted auth provider.
+
+Typed auth helpers:
+
+```ts
+// convoy/functions/_auth.ts
+import { convoyError, createFunctionHelpers, type Id } from 'convoy';
+import type { ServerContext } from '../_generated/server';
+
+export type AuthContext = ServerContext & { auth: { userId: Id<'users'> } | null };
+
+const helpers = createFunctionHelpers<AuthContext>();
+export const authQuery = helpers.query;
+export const authMutation = helpers.mutation;
+
+export function requireAuth(ctx: AuthContext) {
+  if (!ctx.auth?.userId) {
+    throw convoyError('UNAUTHORIZED', 'Missing session');
+  }
+  return ctx.auth;
+}
+```
+
+---
+
 ### How reactivity works (high level)
 
 1. useQuery opens an SSE subscription
@@ -357,16 +359,6 @@ Near-term (v1):
 - auth patterns via request context
 - clear dev vs deploy workflows
 - escape hatches (raw SQL, interop)
-
-#### Later:
-
-- WebSocket transport (alternative to SSE)
-- mobile-friendly subscriptions
-- optional advanced client adapters
-- guided JSONB → relational migration tooling
-- optional managed hosting
-
-See ROADMAP.md for details.
 
 ---
 

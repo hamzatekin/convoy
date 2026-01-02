@@ -40,6 +40,11 @@ Convex-style developer experience on top of user-owned Postgres, with JSONB as t
 ## V1 Non-goals
 
 - JSONB to relational promotion/migrations
+- WebSocket transport (alternative to SSE)
 - Advanced auth/ACL framework (basic context only)
 - Built-in destructive migrations
-- Offline-first sync
+- WebSocket transport (alternative to SSE)
+- mobile-friendly subscriptions
+- optional advanced client adapters
+- guided JSONB → relational migration tooling
+- optional managed hosting
