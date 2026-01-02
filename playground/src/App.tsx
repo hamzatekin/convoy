@@ -19,11 +19,21 @@ export default function App() {
     data: projects,
     error: projectsError,
     isLoading: projectsLoading,
+    connectionState: projectsConnection,
+    isReconnecting: projectsReconnecting,
+    isStale: projectsStale,
   } = useQuery(api.projects.listProjects, projectsArgs);
 
   const tasksArgs = selectedProjectId ? { projectId: selectedProjectId } : null;
 
-  const { data: tasks, error: tasksError, isLoading: tasksLoading } = useQuery(api.tasks.listTasks, tasksArgs);
+  const {
+    data: tasks,
+    error: tasksError,
+    isLoading: tasksLoading,
+    connectionState: tasksConnection,
+    isReconnecting: tasksReconnecting,
+    isStale: tasksStale,
+  } = useQuery(api.tasks.listTasks, tasksArgs);
 
   const projectsData: Array<Doc<'projects'>> = projects ?? [];
   const tasksData: Array<Doc<'tasks'>> = tasks ?? [];
@@ -31,31 +41,85 @@ export default function App() {
   const combinedError = error ?? projectsError?.message ?? tasksError?.message ?? null;
 
   return (
-    <div className="app">
-      <header>
-        <h1>Convoy Project Tracker</h1>
-        <p>Realtime invalidation via LISTEN/NOTIFY + SSE.</p>
-      </header>
+    <div className="relative min-h-screen overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute -top-32 right-8 h-72 w-72 rounded-full blur-3xl"
+          style={{ backgroundColor: 'rgb(var(--convoy-amber) / 0.6)' }}
+        />
+        <div
+          className="absolute top-12 left-10 h-80 w-80 rounded-full blur-3xl"
+          style={{ backgroundColor: 'rgb(var(--convoy-sky) / 0.6)' }}
+        />
+        <div
+          className="absolute bottom-12 right-1/3 h-72 w-72 rounded-full blur-3xl"
+          style={{ backgroundColor: 'rgb(var(--convoy-emerald) / 0.5)' }}
+        />
+      </div>
+      <div className="relative mx-auto flex max-w-6xl flex-col gap-8 px-6 py-10">
+        <header className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <span className="text-xs uppercase tracking-[0.25em] text-slate-500">Convoy playground</span>
+              <h1 className="mt-2 text-4xl font-semibold text-slate-900">Trello Lite Board</h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                Simple boards and cards with realtime updates powered by Convoy queries, mutations, and SSE refreshes.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200/80">
+                Boards: {projectsLoading ? 'syncing' : projectsData.length}
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200/80">
+                Cards: {tasksLoading ? 'syncing' : tasksData.length}
+              </span>
+            </div>
+          </div>
+        </header>
 
-      <SessionPanel userId={userId} setUserId={setUserId} setStatus={setStatus} setError={setError} />
-      <ProjectsPanel
-        userId={userId}
-        projects={projectsData}
-        projectsLoading={projectsLoading}
-        selectedProjectId={selectedProjectId}
-        setSelectedProjectId={setSelectedProjectId}
-        setStatus={setStatus}
-        setError={setError}
-      />
-      <TasksPanel
-        selectedProject={selectedProject}
-        selectedProjectId={selectedProjectId}
-        tasks={tasksData}
-        tasksLoading={tasksLoading}
-        setStatus={setStatus}
-        setError={setError}
-      />
-      <StatusPanel status={status} error={combinedError} />
+        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+          <aside className="space-y-6">
+            <SessionPanel userId={userId} setUserId={setUserId} setStatus={setStatus} setError={setError} />
+            <ProjectsPanel
+              userId={userId}
+              projects={projectsData}
+              projectsLoading={projectsLoading}
+              selectedProjectId={selectedProjectId}
+              setSelectedProjectId={setSelectedProjectId}
+              setStatus={setStatus}
+              setError={setError}
+            />
+          </aside>
+          <section className="space-y-6">
+            <TasksPanel
+              selectedProject={selectedProject}
+              selectedProjectId={selectedProjectId}
+              tasks={tasksData}
+              tasksLoading={tasksLoading}
+              setStatus={setStatus}
+              setError={setError}
+            />
+            <StatusPanel
+              status={status}
+              error={combinedError}
+              streams={[
+                {
+                  label: 'Boards feed',
+                  state: projectsConnection,
+                  isReconnecting: projectsReconnecting,
+                  isStale: projectsStale,
+                },
+                {
+                  label: 'Cards feed',
+                  state: tasksConnection,
+                  isReconnecting: tasksReconnecting,
+                  isStale: tasksStale,
+                },
+              ]}
+            />
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
