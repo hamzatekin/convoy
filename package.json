@@ -6,6 +6,16 @@
   "workspaces": [
     "playground"
   ],
+  "bin": {
+    "convoy": "./bin/convoy.js"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "src",
+    "README.md",
+    "ROADMAP.md"
+  ],
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -33,37 +43,42 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "convoy:dev": "bun run scripts/convoy-dev.ts",
-    "convoy:server:debug": "CONVOY_DEBUG=1 bun run --cwd playground convoy:server",
-    "playground:dev": "bun run --cwd playground dev",
-    "playground:build": "bun run --cwd playground build",
-    "playground:preview": "bun run --cwd playground preview",
-    "playground:typecheck": "bun run --cwd playground typecheck",
-    "playground:convoy:dev": "bun run --cwd playground convoy:dev",
-    "playground:convoy:once": "bun run --cwd playground convoy:once",
-    "playground:convoy:server": "bun run --cwd playground convoy:server",
-    "playground:convoy:server:debug": "CONVOY_DEBUG=1 bun run --cwd playground convoy:server",
+    "convoy:dev": "node bin/convoy.js dev",
+    "convoy:server:debug": "CONVOY_DEBUG=1 npm --prefix playground run convoy:server",
+    "playground:dev": "npm --prefix playground run dev",
+    "playground:build": "npm --prefix playground run build",
+    "playground:preview": "npm --prefix playground run preview",
+    "playground:typecheck": "npm --prefix playground run typecheck",
+    "playground:convoy:dev": "npm --prefix playground run convoy:dev",
+    "playground:convoy:once": "npm --prefix playground run convoy:once",
+    "playground:convoy:server": "npm --prefix playground run convoy:server",
+    "playground:convoy:server:debug": "CONVOY_DEBUG=1 npm --prefix playground run convoy:server",
     "prepare": "husky",
     "format": "prettier --write .",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.1",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "tsx": "^4.20.5"
   },
   "peerDependencies": {
     "zod": "^3.23.0 || ^4.0.0"
   },
   "devDependencies": {
-    "zod": "^4.2.1",
-    "react": "^19.1.1",
-    "@types/react": "^19.1.13",
+    "@testing-library/react": "^16.3.1",
     "@types/node": "^25.0.3",
     "@types/pg": "^8.15.5",
+    "@types/react": "^19.1.13",
     "husky": "^9.1.7",
+    "happy-dom": "^18.0.0",
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
+    "react": "^19.1.1",
     "typescript": "~5.9.3",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^4.0.16",
+    "zod": "^4.2.1"
   }
 }

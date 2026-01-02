@@ -32,13 +32,27 @@ type QuerySubscriptionMessage =
   | { type: 'error'; name: string; error: string; ts?: number };
 
 type QuerySubscriptionListener = (message: QuerySubscriptionMessage) => void;
+type QuerySubscriptionStatus = {
+  state: 'open' | 'connecting' | 'closed';
+  readyState: number;
+};
+
+type QuerySubscriptionStatusListener = (status: QuerySubscriptionStatus) => void;
+
 type QuerySubscriptionSource = {
+  url: string;
   source: EventSource;
   listeners: Set<QuerySubscriptionListener>;
+  statusListeners: Set<QuerySubscriptionStatusListener>;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+  reconnectDelayMs: number;
+  status: QuerySubscriptionStatus;
 };
 
 const querySubscriptionSources = new Map<string, QuerySubscriptionSource>();
 const localInvalidationListeners = new Set<InvalidationListener>();
+const MIN_RECONNECT_DELAY_MS = 1000;
+const MAX_RECONNECT_DELAY_MS = 15000;
 const debugEnabled =
   (typeof window !== 'undefined' && window.localStorage?.getItem('CONVOY_DEBUG') === '1') ||
   (typeof process !== 'undefined' && process.env?.CONVOY_DEBUG === '1');
@@ -103,36 +117,118 @@ function parseQueryMessage(raw: string): QuerySubscriptionMessage | null {
   }
 }
 
-function subscribeToQueryResults(url: string, listener: QuerySubscriptionListener): () => void {
+function notifyStatus(entry: QuerySubscriptionSource, status: QuerySubscriptionStatus): void {
+  entry.status = status;
+  for (const listener of entry.statusListeners) {
+    listener(status);
+  }
+}
+
+function scheduleReconnect(entry: QuerySubscriptionSource): void {
+  if (entry.reconnectTimer || entry.listeners.size === 0) {
+    return;
+  }
+  const delay = entry.reconnectDelayMs;
+  entry.reconnectDelayMs = Math.min(entry.reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+  entry.reconnectTimer = setTimeout(() => {
+    entry.reconnectTimer = null;
+    if (entry.listeners.size === 0) {
+      return;
+    }
+    entry.source.close();
+    entry.source = new EventSource(entry.url);
+    attachEventSource(entry);
+    debugLog('SSE reconnecting', { url: entry.url, delay });
+  }, delay);
+}
+
+function attachEventSource(entry: QuerySubscriptionSource): void {
+  const { url, source } = entry;
+  notifyStatus(entry, { state: 'connecting', readyState: source.readyState });
+  source.onopen = () => {
+    if (entry.source !== source) {
+      return;
+    }
+    if (entry.reconnectTimer) {
+      clearTimeout(entry.reconnectTimer);
+      entry.reconnectTimer = null;
+    }
+    entry.reconnectDelayMs = MIN_RECONNECT_DELAY_MS;
+    notifyStatus(entry, { state: 'open', readyState: source.readyState });
+    debugLog('SSE connected', { url });
+  };
+  source.onerror = () => {
+    if (entry.source !== source) {
+      return;
+    }
+    const readyState = source.readyState;
+    const state = readyState === EventSource.CLOSED ? 'closed' : 'connecting';
+    notifyStatus(entry, { state, readyState });
+    debugLog('SSE error', { url, readyState });
+    if (readyState === EventSource.CLOSED) {
+      scheduleReconnect(entry);
+    }
+  };
+  source.onmessage = (event) => {
+    if (entry.source !== source) {
+      return;
+    }
+    const message = parseQueryMessage(event.data);
+    if (!message) {
+      debugLog('SSE message ignored', { url });
+      return;
+    }
+    debugLog('SSE message', { url, type: message.type });
+    for (const callback of entry.listeners) {
+      callback(message);
+    }
+  };
+}
+
+function createQuerySubscriptionSource(url: string): QuerySubscriptionSource {
+  const source = new EventSource(url);
+  const entry: QuerySubscriptionSource = {
+    url,
+    source,
+    listeners: new Set(),
+    statusListeners: new Set(),
+    reconnectTimer: null,
+    reconnectDelayMs: MIN_RECONNECT_DELAY_MS,
+    status: { state: 'connecting', readyState: source.readyState },
+  };
+  attachEventSource(entry);
+  return entry;
+}
+
+function subscribeToQueryResults(
+  url: string,
+  listener: QuerySubscriptionListener,
+  options?: { onStatus?: QuerySubscriptionStatusListener },
+): () => void {
   let entry = querySubscriptionSources.get(url);
   if (!entry) {
-    const source = new EventSource(url);
-    const listeners = new Set<QuerySubscriptionListener>();
-    source.onopen = () => {
-      debugLog('SSE connected', { url });
-    };
-    source.onerror = () => {
-      debugLog('SSE error', { url });
-    };
-    source.onmessage = (event) => {
-      const message = parseQueryMessage(event.data);
-      if (!message) {
-        debugLog('SSE message ignored', { url });
-        return;
-      }
-      debugLog('SSE message', { url, type: message.type });
-      for (const callback of listeners) {
-        callback(message);
-      }
-    };
-    entry = { source, listeners };
+    entry = createQuerySubscriptionSource(url);
     querySubscriptionSources.set(url, entry);
     debugLog('SSE subscribed', { url });
   }
+  if (entry.source.readyState === EventSource.CLOSED) {
+    scheduleReconnect(entry);
+  }
   entry.listeners.add(listener);
+  if (options?.onStatus) {
+    entry.statusListeners.add(options.onStatus);
+    options.onStatus(entry.status);
+  }
   return () => {
     entry?.listeners.delete(listener);
+    if (options?.onStatus) {
+      entry?.statusListeners.delete(options.onStatus);
+    }
     if (entry && entry.listeners.size === 0) {
+      if (entry.reconnectTimer) {
+        clearTimeout(entry.reconnectTimer);
+        entry.reconnectTimer = null;
+      }
       entry.source.close();
       querySubscriptionSources.delete(url);
       debugLog('SSE unsubscribed', { url });
@@ -157,6 +253,8 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
   const argsRef = useRef(args);
   const lastAutoFetchKeyRef = useRef<string | null>(null);
   const sseActiveRef = useRef(false);
+  const sseEverConnectedRef = useRef(false);
+  const sseWasOpenRef = useRef(false);
 
   useEffect(() => {
     argsRef.current = args;
@@ -235,6 +333,8 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       return;
     }
     sseActiveRef.current = false;
+    sseEverConnectedRef.current = false;
+    sseWasOpenRef.current = false;
     const unsubscribeLocal = subscribeToLocalInvalidations(() => {
       if (sseActiveRef.current) {
         debugLog('Local invalidation ignored (SSE active)', {
@@ -249,17 +349,38 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
     });
     if (typeof EventSource !== 'undefined') {
       const url = buildQuerySubscribeUrl(subscribeUrl, ref.name, argsRef.current);
-      const unsubscribeSse = subscribeToQueryResults(url, (message) => {
-        sseActiveRef.current = true;
-        if (message.type === 'result') {
-          setData(message.data as ResultOfRef<TRef>);
-          setError(null);
+      const unsubscribeSse = subscribeToQueryResults(
+        url,
+        (message) => {
+          sseActiveRef.current = true;
+          if (message.type === 'result') {
+            setData(message.data as ResultOfRef<TRef>);
+            setError(null);
+            setIsLoading(false);
+            return;
+          }
+          setError(new Error(message.error ?? 'Query failed'));
           setIsLoading(false);
-          return;
-        }
-        setError(new Error(message.error ?? 'Query failed'));
-        setIsLoading(false);
-      });
+        },
+        {
+          onStatus: (status) => {
+            const isOpen = status.state === 'open';
+            sseActiveRef.current = isOpen;
+            if (isOpen) {
+              const wasOpen = sseWasOpenRef.current;
+              sseWasOpenRef.current = true;
+              if (sseEverConnectedRef.current && !wasOpen) {
+                if (enabled && argsRef.current != null) {
+                  void refetch();
+                }
+              }
+              sseEverConnectedRef.current = true;
+              return;
+            }
+            sseWasOpenRef.current = false;
+          },
+        },
+      );
       return () => {
         unsubscribeSse();
         unsubscribeLocal();
