@@ -12,10 +12,10 @@ Convex-style DX on user-owned Postgres with JSONB as the default model.
 
 Deliverables:
 
-- [Improvement] `convoy dev` watches schema/functions and starts the local HTTP server
-- [Improvement] Standard `/api/query|mutation/:name` router using `_generated/functions.ts`
-- [Improvement] Structured error responses + request size limits
-- [Improvement] Example playground using the generated server (no Vite middleware)
+- [Improvement] `convoy dev` watches schema/functions and starts the local HTTP server (done)
+- [Improvement] Standard `/api/query|mutation/:name` router using `_generated/functions.ts` (done)
+- [Improvement] Structured error responses + request size limits (done)
+- [Improvement] Example playground using the generated server (no Vite middleware) (done)
 
 Cut line:
 
@@ -26,14 +26,18 @@ Done when:
 
 - A project can run `convoy dev` and the app can call queries/mutations end-to-end
 
+Status:
+
+- Done. Remaining polish tracked in "Polish / Later".
+
 ## M1 - Safe schema sync
 
 Deliverables:
 
-- [New] `convoy sync` (server/CI) separate from `convoy dev`
-- [Improvement] "Never drop" default + `--dry-run` schema diff output
-- [New] Schema hash + sync log table
-- [Improvement] Docs for running sync only in server/CI contexts
+- [New] `convoy sync` (server/CI) separate from `convoy dev` (pending)
+- [Improvement] "Never drop" default + `--dry-run` schema diff output (pending)
+- [New] Schema hash + sync log table (pending)
+- [Improvement] Docs for running sync only in server/CI contexts (pending)
 
 Cut line:
 
@@ -43,14 +47,18 @@ Done when:
 
 - Schema updates are applied only through controlled server/CI paths
 
+Status:
+
+- Not started. Needs CLI split (`convoy sync`) and schema diff tracking.
+
 ## M2 - Type safety + client integration
 
 Deliverables:
 
-- [Improvement] Generated `api.d.ts`, `server.d.ts`, `dataModel.d.ts` (no server code in client bundles)
-- [New] Optional TanStack Query adapter (`@convoy/react-query`)
-- [Improvement] Clear docs on typed refs + hooks
-- [New] Enforce read-only queries (no writes in queries) with runtime guard + typings
+- [Improvement] Generated `api.d.ts`, `server.d.ts`, `dataModel.d.ts` (no server code in client bundles) (done)
+- [New] Optional TanStack Query adapter (`@convoy/react-query`) (pending)
+- [Improvement] Clear docs on typed refs + hooks (partial)
+- [New] Enforce read-only queries (no writes in queries) with runtime guard + typings (pending)
 
 Cut line:
 
@@ -60,14 +68,18 @@ Done when:
 
 - Client DX matches Convex-style type safety without bundling server code
 
+Status:
+
+- In progress. Types are generated; docs + read-only enforcement remain.
+
 ## M3 - Auth + policy layer
 
 Deliverables:
 
-- [New] Standard `ctx.auth` shape
-- [New] Middleware for auth extraction
-- [New] Table-level read/write rules
-- [Improvement] Tests for enforcement + examples
+- [New] Standard `ctx.auth` shape (pending)
+- [New] Middleware for auth extraction (pending)
+- [New] Table-level read/write rules (pending)
+- [Improvement] Tests for enforcement + examples (pending)
 
 Cut line:
 
@@ -77,13 +89,17 @@ Done when:
 
 - Teams can implement allow/deny rules without per-function guards
 
+Status:
+
+- Not started. Needs auth context and policy middleware.
+
 ## M4 - JSONB to relational promotion
 
 Deliverables:
 
-- [New] `convoy promote` to generate SQL for columns + indexes
-- [New] Dual-read/dual-write helpers
-- [New] Backfill tool + migration docs
+- [New] `convoy promote` to generate SQL for columns + indexes (pending)
+- [New] Dual-read/dual-write helpers (pending)
+- [New] Backfill tool + migration docs (pending)
 
 Cut line:
 
@@ -93,23 +109,14 @@ Done when:
 
 - Hot fields can be promoted without breaking API types
 
-## M5 - Realtime + ElectricSQL sync
+Status:
 
-Deliverables:
+- Not started. Needs promote tooling + migration story.
 
-- [New] ElectricSQL integration plan + starter adapter
-- [New] Mutation invalidation events (LISTEN/NOTIFY or pub/sub adapter)
-- [New] Server broadcast layer
-- [Improvement] Swap SSE subscriptions for WebSocket transport (mobile reliability)
+Status:
 
-Notes:
+- Partial. Invalidation + SSE broadcast done; ElectricSQL plan + WebSocket pending.
 
-- This is the sync revenue driver; prioritize when core DX stabilizes.
+## Polish / Later
 
-Cut line:
-
-- Offline/CRDT support not in scope
-
-Done when:
-
-- Mutations trigger deterministic invalidation and a sync path is defined
+- [Polish] Ship a `convoy` CLI wrapper/binary so `convoy dev` works without TS loaders (pending)

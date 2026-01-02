@@ -39,7 +39,9 @@ type FunctionExport = {
   moduleVar: string;
 };
 
-type ApiTree = Record<string, ApiTree | FunctionExport>;
+interface ApiTree {
+  [key: string]: ApiTree | FunctionExport;
+}
 
 type ModuleInfo = {
   filePath: string;
@@ -455,15 +457,15 @@ import type { ZodRawShape } from "zod";
 type Db = DbFromSchema<typeof schema>;
 export type ServerContext = ConvoyContext<Db>;
 
-type ArgsShape = ZodRawShape;
+type InputShape = ZodRawShape;
 
-export declare const query: <TArgs extends ArgsShape, TResult>(
-  definition: ConvoyFunctionDefinition<ServerContext, TArgs, TResult>,
-) => ConvoyFunction<ServerContext, TArgs, TResult>;
+export declare const query: <TInput extends InputShape, TResult>(
+  definition: ConvoyFunctionDefinition<ServerContext, TInput, TResult>,
+) => ConvoyFunction<ServerContext, TInput, TResult>;
 
-export declare const mutation: <TArgs extends ArgsShape, TResult>(
-  definition: ConvoyFunctionDefinition<ServerContext, TArgs, TResult>,
-) => ConvoyFunction<ServerContext, TArgs, TResult>;
+export declare const mutation: <TInput extends InputShape, TResult>(
+  definition: ConvoyFunctionDefinition<ServerContext, TInput, TResult>,
+) => ConvoyFunction<ServerContext, TInput, TResult>;
 `;
 
   await writeFileIfChanged(path.join(generatedDir, 'server.d.ts'), content);
