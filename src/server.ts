@@ -1,22 +1,22 @@
 import { z } from 'zod';
 import { sql, type SQL } from 'drizzle-orm';
 import type { Id, TableDefinition } from './types';
-import { encodeId, isUuid, parseId } from './utils/ids';
+import { encodeId, isUuid, parseId } from './schema/ids';
 
-type ArgsShape = z.ZodRawShape;
+type InputShape = z.ZodRawShape;
 type SchemaTables = Record<string, TableDefinition<any, any>>;
 
-type ArgsInput<TArgs extends ArgsShape> = z.input<z.ZodObject<TArgs>>;
+type InputData<TInput extends InputShape> = z.input<z.ZodObject<TInput>>;
 
 export type ConvoyContext<TDb> = {
   db: TDb;
-  runQuery: <TArgs extends ArgsShape, TResult>(
-    fn: ConvoyFunction<ConvoyContext<TDb>, TArgs, TResult>,
-    args: ArgsInput<TArgs>,
+  runQuery: <TInput extends InputShape, TResult>(
+    fn: ConvoyFunction<ConvoyContext<TDb>, TInput, TResult>,
+    input: InputData<TInput>,
   ) => Promise<TResult>;
-  runMutation: <TArgs extends ArgsShape, TResult>(
-    fn: ConvoyFunction<ConvoyContext<TDb>, TArgs, TResult>,
-    args: ArgsInput<TArgs>,
+  runMutation: <TInput extends InputShape, TResult>(
+    fn: ConvoyFunction<ConvoyContext<TDb>, TInput, TResult>,
+    input: InputData<TInput>,
   ) => Promise<TResult>;
 };
 
@@ -24,64 +24,68 @@ type DefaultContext = ConvoyContext<any>;
 
 export function createContext<TDb>(db: TDb): ConvoyContext<TDb> {
   const ctx = { db } as ConvoyContext<TDb>;
-  ctx.runQuery = async (fn, args) => {
+  ctx.runQuery = async (fn, input) => {
     if (fn.kind !== 'query') {
       throw new Error('runQuery expects a query function');
     }
-    return fn.run(ctx, args);
+    return fn.run(ctx, input);
   };
-  ctx.runMutation = async (fn, args) => {
+  ctx.runMutation = async (fn, input) => {
     if (fn.kind !== 'mutation') {
       throw new Error('runMutation expects a mutation function');
     }
-    return fn.run(ctx, args);
+    return fn.run(ctx, input);
   };
   return ctx;
 }
 
-export type ConvoyFunction<TCtx, TArgs extends ArgsShape, TResult> = {
+export type ConvoyFunction<TCtx, TInput extends InputShape, TResult> = {
   kind: 'query' | 'mutation';
-  args: TArgs;
-  handler: (ctx: TCtx, args: z.infer<z.ZodObject<TArgs>>) => TResult | Promise<TResult>;
-  run: (ctx: TCtx, args: unknown) => Promise<TResult>;
+  input: TInput;
+  handler: (ctx: TCtx, input: z.infer<z.ZodObject<TInput>>) => TResult | Promise<TResult>;
+  run: (ctx: TCtx, input: unknown) => Promise<TResult>;
 };
 
-export type ConvoyFunctionDefinition<TCtx = DefaultContext, TArgs extends ArgsShape = ArgsShape, TResult = unknown> = {
-  args: TArgs;
-  handler: (ctx: TCtx, args: z.infer<z.ZodObject<TArgs>>) => TResult | Promise<TResult>;
+export type ConvoyFunctionDefinition<
+  TCtx = DefaultContext,
+  TInput extends InputShape = InputShape,
+  TResult = unknown,
+> = {
+  input: TInput;
+  handler: (ctx: TCtx, input: z.infer<z.ZodObject<TInput>>) => TResult | Promise<TResult>;
 };
 
-function createFunction<TCtx, TArgs extends ArgsShape, TResult>(
+function createFunction<TCtx, TInput extends InputShape, TResult>(
   kind: 'query' | 'mutation',
-  definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>,
-): ConvoyFunction<TCtx, TArgs, TResult> {
-  const argsSchema = z.object(definition.args);
+  definition: ConvoyFunctionDefinition<TCtx, TInput, TResult>,
+): ConvoyFunction<TCtx, TInput, TResult> {
+  const inputSchema = z.object(definition.input);
   return {
     kind,
-    args: definition.args,
+    input: definition.input,
     handler: definition.handler,
-    run: async (ctx, args) => definition.handler(ctx, argsSchema.parse(args)),
+    run: async (ctx, input) => definition.handler(ctx, inputSchema.parse(input)),
   };
 }
 
-export function query<TCtx = DefaultContext, TArgs extends ArgsShape = ArgsShape, TResult = unknown>(
-  definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>,
-): ConvoyFunction<TCtx, TArgs, TResult> {
+export function query<TCtx = DefaultContext, TInput extends InputShape = InputShape, TResult = unknown>(
+  definition: ConvoyFunctionDefinition<TCtx, TInput, TResult>,
+): ConvoyFunction<TCtx, TInput, TResult> {
   return createFunction('query', definition);
 }
 
-export function mutation<TCtx = DefaultContext, TArgs extends ArgsShape = ArgsShape, TResult = unknown>(
-  definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>,
-): ConvoyFunction<TCtx, TArgs, TResult> {
+export function mutation<TCtx = DefaultContext, TInput extends InputShape = InputShape, TResult = unknown>(
+  definition: ConvoyFunctionDefinition<TCtx, TInput, TResult>,
+): ConvoyFunction<TCtx, TInput, TResult> {
   return createFunction('mutation', definition);
 }
 
 export function createFunctionHelpers<TCtx>() {
   return {
-    query: <TArgs extends ArgsShape, TResult>(definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>) =>
-      query<TCtx, TArgs, TResult>(definition),
-    mutation: <TArgs extends ArgsShape, TResult>(definition: ConvoyFunctionDefinition<TCtx, TArgs, TResult>) =>
-      mutation<TCtx, TArgs, TResult>(definition),
+    query: <TInput extends InputShape, TResult>(definition: ConvoyFunctionDefinition<TCtx, TInput, TResult>) =>
+      query<TCtx, TInput, TResult>(definition),
+    mutation: <TInput extends InputShape, TResult>(definition: ConvoyFunctionDefinition<TCtx, TInput, TResult>) =>
+      mutation<TCtx, TInput, TResult>(definition),
   };
 }
 
