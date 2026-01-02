@@ -51,6 +51,28 @@ Convoy uses Postgres `LISTEN / NOTIFY` for change signals and Server-Sent Events
 
 ---
 
+---
+
+## Core Concepts
+
+### Schema
+
+Define your data shape once using Zod. Convoy stores rows as JSONB documents in Postgres and ensures tables and indexes exist during development.
+
+### Queries
+
+Queries are pure read functions. Clients subscribe to queries and receive live updates automatically.
+
+### Mutations
+
+Mutations are write + business logic functions. When a mutation runs, Convoy invalidates affected queries and pushes updated results to subscribed clients.
+
+### Reactivity
+
+Convoy uses Postgres `LISTEN / NOTIFY` for change signals and Server-Sent Events (SSE) to stream authoritative query results to clients.
+
+---
+
 ## Quickstart
 
 ### 1) Define your schema
