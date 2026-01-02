@@ -14,10 +14,10 @@ function resolveTsxArgs() {
 }
 
 if (isBun) {
-  await import('../scripts/convoy-dev.js');
+  await import('../scripts/convoy-dev.ts');
 } else {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const scriptPath = path.join(here, '..', 'scripts', 'convoy-dev.js');
+  const scriptPath = path.join(here, '..', 'scripts', 'convoy-dev.ts');
   const child = spawn(process.execPath, [...resolveTsxArgs(), scriptPath, ...args], {
     stdio: 'inherit',
     env: process.env,

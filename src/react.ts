@@ -252,6 +252,8 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
   const [isLoading, setIsLoading] = useState(false);
   const argsRef = useRef(args);
   const lastAutoFetchKeyRef = useRef<string | null>(null);
+  const requestIdRef = useRef(0);
+  const activeRequestRef = useRef(0);
   const sseActiveRef = useRef(false);
   const sseEverConnectedRef = useRef(false);
   const sseWasOpenRef = useRef(false);
@@ -270,19 +272,27 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       if (resolvedArgs == null) {
         return null;
       }
+      const requestId = (requestIdRef.current += 1);
+      activeRequestRef.current = requestId;
       debugLog('Query refetch', { name: ref.name });
       setIsLoading(true);
       setError(null);
       try {
         const result = await client.query(ref, resolvedArgs);
-        setData(result);
+        if (activeRequestRef.current === requestId) {
+          setData(result);
+        }
         return result;
       } catch (err) {
         const nextError = err instanceof Error ? err : new Error('Query failed');
-        setError(nextError);
+        if (activeRequestRef.current === requestId) {
+          setError(nextError);
+        }
         return null;
       } finally {
-        setIsLoading(false);
+        if (activeRequestRef.current === requestId) {
+          setIsLoading(false);
+        }
       }
     },
     [client, ref],
@@ -300,23 +310,25 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
     }
     lastAutoFetchKeyRef.current = argsKey;
     let cancelled = false;
+    const requestId = (requestIdRef.current += 1);
+    activeRequestRef.current = requestId;
     setIsLoading(true);
     setError(null);
     client
       .query(ref, resolvedArgs)
       .then((result) => {
-        if (!cancelled) {
+        if (!cancelled && activeRequestRef.current === requestId) {
           setData(result);
         }
       })
       .catch((err) => {
-        if (!cancelled) {
+        if (!cancelled && activeRequestRef.current === requestId) {
           const nextError = err instanceof Error ? err : new Error('Query failed');
           setError(nextError);
         }
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!cancelled && activeRequestRef.current === requestId) {
           setIsLoading(false);
         }
       });
@@ -352,6 +364,8 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       const unsubscribeSse = subscribeToQueryResults(
         url,
         (message) => {
+          const requestId = (requestIdRef.current += 1);
+          activeRequestRef.current = requestId;
           sseActiveRef.current = true;
           if (message.type === 'result') {
             setData(message.data as ResultOfRef<TRef>);

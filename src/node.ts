@@ -26,12 +26,47 @@ export type ConvoyNodeHandler = (req: IncomingMessage, res: ServerResponse) => P
 type UnhandledRequestHandler = (req: IncomingMessage, res: ServerResponse) => void;
 
 const DEFAULT_MAX_BODY_SIZE = 1024 * 1024;
+const DEFAULT_SSE_RETRY_MS = 1000;
+const DEFAULT_SSE_HEARTBEAT_MS = 25000;
 
 export type ConvoyMutationEvent<TContext> = {
   name: string;
   input: unknown;
   result: unknown;
   context: TContext;
+};
+
+type ContextProvider<TContext> = {
+  createContext?: (req: IncomingMessage) => TContext | Promise<TContext>;
+  context?: TContext;
+};
+
+type QuerySubscriptionMessage =
+  | { type: 'result'; name: string; ts: number; data: unknown }
+  | { type: 'error'; name: string; ts: number; error: string };
+
+type QuerySubscription<TContext> = {
+  res: ServerResponse;
+  name: string;
+  args: unknown;
+  fn: ConvoyFunction<TContext, any, any>;
+  context: TContext;
+  running: boolean;
+  pending: boolean;
+  heartbeat: ReturnType<typeof setInterval> | null;
+};
+
+export type ConvoyQuerySubscriptionManagerOptions<TContext> = ContextProvider<TContext> & {
+  queries: FunctionMap<TContext>;
+  maxSubscriptions?: number;
+  retryMs?: number;
+  heartbeatMs?: number;
+  log?: (message: string, details?: unknown) => void;
+};
+
+export type ConvoyQuerySubscriptionManager = {
+  subscribe: (req: IncomingMessage, res: ServerResponse) => void;
+  refreshAll: () => void;
 };
 
 function normalizeBasePath(basePath: string): string {
@@ -82,7 +117,7 @@ async function readBody(req: IncomingMessage, maxBodySize: number): Promise<stri
 }
 
 function resolveContext<TContext>(
-  options: ConvoyNodeHandlerOptions<TContext>,
+  options: ContextProvider<TContext>,
   req: IncomingMessage,
 ): TContext | Promise<TContext> {
   if (options.createContext) {
@@ -92,6 +127,207 @@ function resolveContext<TContext>(
     return options.context;
   }
   throw new Error('Convoy handler requires a context or createContext option');
+}
+
+function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
+  return Boolean(value && typeof (value as { then?: unknown }).then === 'function');
+}
+
+function writeSse(res: ServerResponse, payload: QuerySubscriptionMessage): void {
+  if (res.writableEnded || res.destroyed) {
+    return;
+  }
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+export function createQuerySubscriptionManager<TContext>(
+  options: ConvoyQuerySubscriptionManagerOptions<TContext>,
+): ConvoyQuerySubscriptionManager {
+  const subscriptions = new Set<QuerySubscription<TContext>>();
+  const maxSubscriptions = options.maxSubscriptions ?? 0;
+  const retryMs = options.retryMs ?? DEFAULT_SSE_RETRY_MS;
+  const heartbeatMs = options.heartbeatMs ?? DEFAULT_SSE_HEARTBEAT_MS;
+  const log = options.log;
+  let pendingContexts = 0;
+
+  const canAccept = () => {
+    if (maxSubscriptions <= 0) {
+      return true;
+    }
+    return subscriptions.size + pendingContexts < maxSubscriptions;
+  };
+
+  const runSubscription = async (subscription: QuerySubscription<TContext>) => {
+    if (subscription.res.writableEnded || subscription.res.destroyed) {
+      subscriptions.delete(subscription);
+      return;
+    }
+    subscription.running = true;
+    try {
+      const data = await subscription.fn.run(subscription.context, subscription.args);
+      writeSse(subscription.res, {
+        type: 'result',
+        name: subscription.name,
+        ts: Date.now(),
+        data,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Query failed';
+      writeSse(subscription.res, {
+        type: 'error',
+        name: subscription.name,
+        ts: Date.now(),
+        error: message,
+      });
+    } finally {
+      subscription.running = false;
+      if (subscription.pending) {
+        subscription.pending = false;
+        void runSubscription(subscription);
+      }
+    }
+  };
+
+  const queueRefresh = (subscription: QuerySubscription<TContext>) => {
+    if (subscription.running) {
+      subscription.pending = true;
+      return;
+    }
+    void runSubscription(subscription);
+  };
+
+  const refreshAll = () => {
+    for (const subscription of subscriptions) {
+      queueRefresh(subscription);
+    }
+  };
+
+  const subscribe = (req: IncomingMessage, res: ServerResponse) => {
+    if (!req.url) {
+      res.statusCode = 400;
+      res.end('Missing URL');
+      return;
+    }
+    if (!canAccept()) {
+      res.statusCode = 429;
+      res.end('Too many subscriptions');
+      return;
+    }
+
+    const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
+    const name = url.searchParams.get('name');
+    if (!name) {
+      res.statusCode = 400;
+      res.end('Missing query name');
+      return;
+    }
+
+    let args: unknown = {};
+    const rawArgs = url.searchParams.get('args');
+    if (rawArgs) {
+      try {
+        args = JSON.parse(rawArgs);
+      } catch {
+        res.statusCode = 400;
+        res.end('Invalid args');
+        return;
+      }
+    }
+
+    const fn = options.queries[name];
+    if (!fn) {
+      res.statusCode = 404;
+      res.end('Unknown query');
+      return;
+    }
+
+    let context: TContext | Promise<TContext>;
+    try {
+      context = resolveContext(options, req);
+    } catch {
+      res.statusCode = 500;
+      res.end('Missing context');
+      return;
+    }
+
+    const setupSubscription = (resolvedContext: TContext) => {
+      if (!canAccept()) {
+        res.statusCode = 429;
+        res.end('Too many subscriptions');
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      if (retryMs > 0) {
+        res.write(`retry: ${retryMs}\n`);
+      }
+      res.write(': ok\n\n');
+
+      const heartbeat =
+        heartbeatMs > 0
+          ? setInterval(() => {
+              if (res.writableEnded || res.destroyed) {
+                return;
+              }
+              res.write(': ping\n\n');
+            }, heartbeatMs)
+          : null;
+
+      const subscription: QuerySubscription<TContext> = {
+        res,
+        name,
+        args,
+        fn,
+        context: resolvedContext,
+        running: false,
+        pending: false,
+        heartbeat,
+      };
+      subscriptions.add(subscription);
+      log?.('Query subscribed', { name, count: subscriptions.size });
+
+      const cleanup = () => {
+        subscriptions.delete(subscription);
+        if (subscription.heartbeat) {
+          clearInterval(subscription.heartbeat);
+        }
+        log?.('Query unsubscribed', { name, count: subscriptions.size });
+      };
+      res.on('close', cleanup);
+      res.on('error', cleanup);
+
+      void runSubscription(subscription);
+    };
+
+    if (isThenable(context)) {
+      pendingContexts += 1;
+      void context
+        .then((resolved) => {
+          pendingContexts = Math.max(0, pendingContexts - 1);
+          if (res.writableEnded || res.destroyed) {
+            return;
+          }
+          setupSubscription(resolved);
+        })
+        .catch(() => {
+          pendingContexts = Math.max(0, pendingContexts - 1);
+          if (res.writableEnded || res.destroyed) {
+            return;
+          }
+          res.statusCode = 500;
+          res.end('Failed to create context');
+        });
+      return;
+    }
+
+    setupSubscription(context);
+  };
+
+  return { subscribe, refreshAll };
 }
 
 export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TContext>): ConvoyNodeHandler {

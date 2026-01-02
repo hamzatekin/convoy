@@ -34,13 +34,13 @@ The goal of **v1** is not more features, but **stability, trust, and production 
 
 ### Runtime & Sync Hardening
 
-- [ ] Stable SSE reconnect behavior
-- [ ] Full re-sync on reconnect or missed events
-- [ ] Limits & safeguards:
-  - max concurrent subscriptions
-  - payload size limits
-- [ ] Deterministic query execution guarantees
-- [ ] Clear mutation boundaries (no partial state leaks)
+- [x] Stable SSE reconnect behavior
+- [x] Full re-sync on reconnect or missed events
+- [x] Limits & safeguards:
+  - [x] max concurrent subscriptions
+  - [x] payload size limits
+- [x] Deterministic query execution guarantees
+- [x] Clear mutation boundaries (no partial state leaks)
 
 ### Error Handling & DX Polish
 

@@ -27,8 +27,6 @@ Start fast with **JSONB document tables**, iterate quickly, and keep a clear pat
 npm install convoy zod
 ```
 
-> Prefer Bun? `bun add convoy zod` works too. The `convoy` CLI runs on Node by default (and `bunx` works in Bun).
-
 ---
 
 ## Core Concepts
@@ -123,6 +121,8 @@ pnpm dlx convoy dev
 yarn dlx convoy dev
 bunx convoy dev
 ```
+
+For local development of this repo, use `npm run convoy:dev` or `bun run convoy:dev` (bunx installs from the registry unless you add a local `file:` dependency).
 
 This will:
 
