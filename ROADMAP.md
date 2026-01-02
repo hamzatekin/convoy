@@ -44,10 +44,10 @@ The goal of **v1** is not more features, but **stability, trust, and production 
 
 ### Error Handling & DX Polish
 
-- [ ] Structured error codes (`UNAUTHORIZED`, `INVALID_ARGS`, etc.)
-- [ ] Typed error responses (not just strings)
-- [ ] Better client-side error states in hooks
-- [ ] Clear loading / stale / reconnect states
+- [x] Structured error codes (`UNAUTHORIZED`, `INVALID_ARGS`, etc.)
+- [x] Typed error responses (not just strings)
+- [x] Better client-side error states in hooks
+- [x] Clear loading / stale / reconnect states
 
 ### Auth as First-Class Context (Not a Service)
 

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createNodeHandler } from '../../src/node.ts';
+import { convoyError } from '../../src/errors.ts';
 import { createContext, mutation, query } from '../../src/server.ts';
 
 type MockResponse = ServerResponse & {
@@ -160,7 +161,11 @@ describe('createNodeHandler', () => {
     expect(res.statusCode).toBe(400);
     const payload = JSON.parse(res.body);
     expect(payload.ok).toBe(false);
-    expect(payload.error).toBeTruthy();
+    expect(payload.error).toEqual(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+      }),
+    );
   });
 
   it('rejects bodies over max size', async () => {
@@ -188,7 +193,10 @@ describe('createNodeHandler', () => {
 
     expect(handled).toBe(true);
     expect(res.statusCode).toBe(413);
-    expect(JSON.parse(res.body)).toEqual({ ok: false, error: 'Request body too large' });
+    expect(JSON.parse(res.body)).toEqual({
+      ok: false,
+      error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body too large' },
+    });
     expect((req as any).destroy).toHaveBeenCalled();
   });
 
@@ -230,6 +238,71 @@ describe('createNodeHandler', () => {
 
     expect(handled).toBe(true);
     expect(res.statusCode).toBe(405);
-    expect(JSON.parse(res.body)).toEqual({ ok: false, error: 'Only GET supported' });
+    expect(JSON.parse(res.body)).toEqual({
+      ok: false,
+      error: { code: 'METHOD_NOT_ALLOWED', message: 'Only GET supported' },
+    });
+  });
+
+  it('maps ConvoyError to structured responses', async () => {
+    const handler = createNodeHandler({
+      queries: {
+        secret: query({
+          input: {},
+          handler: () => {
+            throw convoyError('UNAUTHORIZED', 'Missing token');
+          },
+        }),
+      },
+      mutations: {},
+      context: createTestContext(),
+    });
+    const { req, send } = createRequest({
+      method: 'POST',
+      url: '/api/query/secret',
+      body: JSON.stringify({}),
+    });
+    const res = createResponse();
+
+    const handledPromise = handler(req, res);
+    send();
+    const handled = await handledPromise;
+
+    expect(handled).toBe(true);
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body)).toEqual({
+      ok: false,
+      error: { code: 'UNAUTHORIZED', message: 'Missing token' },
+    });
+  });
+
+  it('maps invalid query input to INVALID_ARGS', async () => {
+    const handler = createNodeHandler({
+      queries: {
+        hello: query({
+          input: { name: z.string() },
+          handler: (_ctx, input) => `hi ${input.name}`,
+        }),
+      },
+      mutations: {},
+      context: createTestContext(),
+    });
+    const { req, send } = createRequest({
+      method: 'POST',
+      url: '/api/query/hello',
+      body: JSON.stringify({ name: 123 }),
+    });
+    const res = createResponse();
+
+    const handledPromise = handler(req, res);
+    send();
+    const handled = await handledPromise;
+
+    expect(handled).toBe(true);
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: 'INVALID_ARGS' }),
+    });
   });
 });

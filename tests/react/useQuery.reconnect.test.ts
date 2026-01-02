@@ -1,10 +1,10 @@
 /* @vitest-environment happy-dom */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { act, cleanup, render } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Window } from 'happy-dom';
 import { makeQueryRef } from '../../src/client.ts';
-import { useQuery } from '../../src/react.ts';
+import { useQuery, type QueryConnectionState } from '../../src/react.ts';
 
 class FakeEventSource {
   static CONNECTING = 0;
@@ -70,8 +70,25 @@ describe('useQuery SSE reconnect', () => {
       null as unknown as { handler: (ctx: unknown, args: { id: string }) => string },
     );
 
+    const stateRef: {
+      current: { connectionState: QueryConnectionState; isReconnecting: boolean; isStale: boolean };
+    } = {
+      current: {
+        connectionState: 'disabled',
+        isReconnecting: false,
+        isStale: false,
+      },
+    };
+
     const Component = () => {
-      useQuery(ref, { id: '1' }, { client, subscribe: true, subscribeUrl: 'http://localhost/api/subscribe' });
+      const { connectionState, isReconnecting, isStale } = useQuery(
+        ref,
+        { id: '1' },
+        { client, subscribe: true, subscribeUrl: 'http://localhost/api/subscribe' },
+      );
+      useEffect(() => {
+        stateRef.current = { connectionState, isReconnecting, isStale };
+      }, [connectionState, isReconnecting, isStale]);
       return null;
     };
 
@@ -91,10 +108,19 @@ describe('useQuery SSE reconnect', () => {
     });
 
     expect(client.query).toHaveBeenCalledTimes(1);
+    expect(stateRef.current.connectionState).toBe('open');
+    expect(stateRef.current.isReconnecting).toBe(false);
 
     await act(async () => {
       firstSource.emitError(FakeEventSource.CLOSED);
     });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(stateRef.current.isReconnecting).toBe(true);
+    expect(stateRef.current.isStale).toBe(true);
 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -112,5 +138,8 @@ describe('useQuery SSE reconnect', () => {
     });
 
     expect(client.query).toHaveBeenCalledTimes(2);
+    expect(stateRef.current.connectionState).toBe('open');
+    expect(stateRef.current.isReconnecting).toBe(false);
+    expect(stateRef.current.isStale).toBe(false);
   });
 });

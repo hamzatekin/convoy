@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createConvoyClient, makeMutationRef, makeQueryRef } from '../src/client.ts';
+import { ConvoyError, createConvoyClient, makeMutationRef, makeQueryRef } from '../src/client.ts';
 
 type FetchCall = {
   input: RequestInfo | URL;
@@ -59,10 +59,12 @@ describe('createConvoyClient', () => {
   });
 
   it('throws when the response is not ok', async () => {
-    const { fetchMock } = createFetchMock({ ok: false, error: 'Nope' }, false);
+    const { fetchMock } = createFetchMock({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Nope' } }, false);
     const client = createConvoyClient({ fetch: fetchMock });
     const ref = makeQueryRef('users.list', null as unknown as { handler: (ctx: unknown, args: {}) => string });
 
-    await expect(client.query(ref, {})).rejects.toThrow('Nope');
+    const result = client.query(ref, {});
+    await expect(result).rejects.toBeInstanceOf(ConvoyError);
+    await expect(result).rejects.toThrow('Nope');
   });
 });

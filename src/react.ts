@@ -7,6 +7,7 @@ import {
   type QueryRef,
   type ResultOfRef,
 } from './client';
+import { ConvoyError, type ConvoyErrorPayload } from './errors';
 
 export type UseQueryOptions = {
   enabled?: boolean;
@@ -23,13 +24,23 @@ export type UseQueryResult<TRef> = {
   data: ResultOfRef<TRef> | null;
   error: Error | null;
   isLoading: boolean;
+  isStale: boolean;
+  isReconnecting: boolean;
+  connectionState: QueryConnectionState;
   refetch: (nextArgs?: ArgsOfRef<TRef> | null) => Promise<ResultOfRef<TRef> | null>;
+};
+
+export type UseMutationResult<TRef> = {
+  mutate: (args: ArgsOfRef<TRef>) => Promise<ResultOfRef<TRef>>;
+  error: Error | null;
+  isLoading: boolean;
+  reset: () => void;
 };
 
 type InvalidationListener = () => void;
 type QuerySubscriptionMessage =
   | { type: 'result'; name: string; data: unknown; ts?: number }
-  | { type: 'error'; name: string; error: string; ts?: number };
+  | { type: 'error'; name: string; error: ConvoyErrorPayload | string; ts?: number };
 
 type QuerySubscriptionListener = (message: QuerySubscriptionMessage) => void;
 type QuerySubscriptionStatus = {
@@ -48,6 +59,8 @@ type QuerySubscriptionSource = {
   reconnectDelayMs: number;
   status: QuerySubscriptionStatus;
 };
+
+export type QueryConnectionState = 'open' | 'connecting' | 'closed' | 'disabled';
 
 const querySubscriptionSources = new Map<string, QuerySubscriptionSource>();
 const localInvalidationListeners = new Set<InvalidationListener>();
@@ -250,6 +263,8 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
   const [data, setData] = useState<ResultOfRef<TRef> | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionState, setConnectionState] = useState<QueryConnectionState>('disabled');
+  const [hasEverConnected, setHasEverConnected] = useState(false);
   const argsRef = useRef(args);
   const lastAutoFetchKeyRef = useRef<string | null>(null);
   const requestIdRef = useRef(0);
@@ -339,14 +354,19 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
 
   useEffect(() => {
     if (!subscribe) {
+      setConnectionState('disabled');
+      setHasEverConnected(false);
       return;
     }
     if (!enabled || argsRef.current == null) {
+      setConnectionState('disabled');
+      setHasEverConnected(false);
       return;
     }
     sseActiveRef.current = false;
     sseEverConnectedRef.current = false;
     sseWasOpenRef.current = false;
+    setHasEverConnected(false);
     const unsubscribeLocal = subscribeToLocalInvalidations(() => {
       if (sseActiveRef.current) {
         debugLog('Local invalidation ignored (SSE active)', {
@@ -360,6 +380,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       void refetch();
     });
     if (typeof EventSource !== 'undefined') {
+      setConnectionState('connecting');
       const url = buildQuerySubscribeUrl(subscribeUrl, ref.name, argsRef.current);
       const unsubscribeSse = subscribeToQueryResults(
         url,
@@ -373,13 +394,18 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
             setIsLoading(false);
             return;
           }
-          setError(new Error(message.error ?? 'Query failed'));
+          if (message.error && typeof message.error === 'object') {
+            setError(new ConvoyError(message.error.code, message.error.message, { details: message.error.details }));
+          } else {
+            setError(new Error(message.error ?? 'Query failed'));
+          }
           setIsLoading(false);
         },
         {
           onStatus: (status) => {
             const isOpen = status.state === 'open';
             sseActiveRef.current = isOpen;
+            setConnectionState(status.state);
             if (isOpen) {
               const wasOpen = sseWasOpenRef.current;
               sseWasOpenRef.current = true;
@@ -389,6 +415,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
                 }
               }
               sseEverConnectedRef.current = true;
+              setHasEverConnected(true);
               return;
             }
             sseWasOpenRef.current = false;
@@ -401,10 +428,14 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       };
     }
 
+    setConnectionState('disabled');
     return () => unsubscribeLocal();
   }, [argsKey, enabled, refetch, ref.name, subscribe, subscribeUrl]);
 
-  return { data, error, isLoading, refetch };
+  const isReconnecting = connectionState !== 'open' && hasEverConnected;
+  const isStale = Boolean(data) && subscribe && connectionState !== 'open';
+
+  return { data, error, isLoading, isStale, isReconnecting, connectionState, refetch };
 }
 
 export function useMutation<TRef extends MutationRef<string, any, any>>(
@@ -420,4 +451,38 @@ export function useMutation<TRef extends MutationRef<string, any, any>>(
     },
     [client, ref],
   );
+}
+
+export function useMutationState<TRef extends MutationRef<string, any, any>>(
+  ref: TRef,
+  options?: UseMutationOptions,
+): UseMutationResult<TRef> {
+  const client = options?.client ?? defaultClient;
+  const [error, setError] = useState<Error | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const mutate = useCallback(
+    async (args: ArgsOfRef<TRef>) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await client.mutation(ref, args);
+        notifyLocalInvalidation();
+        return result;
+      } catch (err) {
+        const nextError = err instanceof Error ? err : new Error('Mutation failed');
+        setError(nextError);
+        throw nextError;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [client, ref],
+  );
+
+  const reset = useCallback(() => {
+    setError(null);
+  }, []);
+
+  return { mutate, error, isLoading, reset };
 }

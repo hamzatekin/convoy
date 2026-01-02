@@ -1,10 +1,12 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { ZodError } from 'zod';
 import type { ConvoyFunction } from './server';
+import { type ConvoyErrorCode, type ConvoyErrorPayload, errorPayloadFrom, isConvoyError } from './errors';
 
 type ApiResponse<T> = {
   ok: boolean;
   data?: T;
-  error?: string;
+  error?: ConvoyErrorPayload;
 };
 
 type FunctionMap<TContext> = Record<string, ConvoyFunction<TContext, any, any>>;
@@ -43,7 +45,7 @@ type ContextProvider<TContext> = {
 
 type QuerySubscriptionMessage =
   | { type: 'result'; name: string; ts: number; data: unknown }
-  | { type: 'error'; name: string; ts: number; error: string };
+  | { type: 'error'; name: string; ts: number; error: ConvoyErrorPayload };
 
 type QuerySubscription<TContext> = {
   res: ServerResponse;
@@ -98,6 +100,17 @@ function sendJson(res: ServerResponse, status: number, payload: ApiResponse<unkn
   res.end(JSON.stringify(payload));
 }
 
+function sendError(
+  res: ServerResponse,
+  status: number,
+  code: ConvoyErrorCode,
+  message: string,
+  details?: Record<string, unknown>,
+) {
+  const error: ConvoyErrorPayload = details ? { code, message, details } : { code, message };
+  sendJson(res, status, { ok: false, error });
+}
+
 async function readBody(req: IncomingMessage, maxBodySize: number): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -140,6 +153,17 @@ function writeSse(res: ServerResponse, payload: QuerySubscriptionMessage): void 
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+function normalizeError(error: unknown): { status: number; payload: ConvoyErrorPayload } {
+  if (isConvoyError(error)) {
+    return { status: error.status, payload: errorPayloadFrom(error) };
+  }
+  if (error instanceof ZodError) {
+    return { status: 400, payload: { code: 'INVALID_ARGS', message: error.message } };
+  }
+  const message = error instanceof Error ? error.message : 'Request failed';
+  return { status: 500, payload: { code: 'INTERNAL', message } };
+}
+
 export function createQuerySubscriptionManager<TContext>(
   options: ConvoyQuerySubscriptionManagerOptions<TContext>,
 ): ConvoyQuerySubscriptionManager {
@@ -172,12 +196,12 @@ export function createQuerySubscriptionManager<TContext>(
         data,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Query failed';
+      const normalized = normalizeError(error);
       writeSse(subscription.res, {
         type: 'error',
         name: subscription.name,
         ts: Date.now(),
-        error: message,
+        error: normalized.payload,
       });
     } finally {
       subscription.running = false;
@@ -340,7 +364,7 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
 
   return async (req, res) => {
     if (!req.url) {
-      sendJson(res, 400, { ok: false, error: 'Missing URL' });
+      sendError(res, 400, 'INVALID_ARGS', 'Missing URL');
       return true;
     }
 
@@ -348,7 +372,7 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
     const path = url.pathname;
     if (subscribePath && path === subscribePath) {
       if (req.method !== 'GET') {
-        sendJson(res, 405, { ok: false, error: 'Only GET supported' });
+        sendError(res, 405, 'METHOD_NOT_ALLOWED', 'Only GET supported');
         return true;
       }
       options.onSubscribe?.(req, res);
@@ -359,14 +383,14 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
       return false;
     }
     if (req.method !== 'POST') {
-      sendJson(res, 405, { ok: false, error: 'Only POST supported' });
+      sendError(res, 405, 'METHOD_NOT_ALLOWED', 'Only POST supported');
       return true;
     }
 
     const remaining = path.slice(basePath.length).replace(/^\/+/, '');
     const segments = remaining.split('/').filter(Boolean);
     if (segments.length !== 2) {
-      sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+      sendError(res, 404, 'NOT_FOUND', 'Unknown endpoint');
       return true;
     }
 
@@ -375,7 +399,7 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
     try {
       name = decodeURIComponent(rawName);
     } catch {
-      sendJson(res, 400, { ok: false, error: 'Invalid endpoint name' });
+      sendError(res, 400, 'INVALID_ARGS', 'Invalid endpoint name');
       return true;
     }
 
@@ -387,8 +411,11 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid request body';
-      const status = message === 'Request body too large' ? 413 : 400;
-      sendJson(res, status, { ok: false, error: message });
+      if (message === 'Request body too large') {
+        sendError(res, 413, 'PAYLOAD_TOO_LARGE', message);
+      } else {
+        sendError(res, 400, 'INVALID_ARGS', message);
+      }
       return true;
     }
 
@@ -396,7 +423,7 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
       const ctx = await resolveContext(options, req);
       const fn = kind === 'mutation' ? mutations[name] : kind === 'query' ? queries[name] : undefined;
       if (!fn) {
-        sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+        sendError(res, 404, 'NOT_FOUND', 'Unknown endpoint');
         return true;
       }
       const data = await fn.run(ctx, input);
@@ -411,8 +438,8 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
       sendJson(res, 200, { ok: true, data });
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Request failed';
-      sendJson(res, 400, { ok: false, error: message });
+      const normalized = normalizeError(error);
+      sendJson(res, normalized.status, { ok: false, error: normalized.payload });
       return true;
     }
   };

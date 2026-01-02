@@ -1,3 +1,5 @@
+import { ConvoyError, type ConvoyErrorPayload } from './errors';
+
 type ArgsOfFunction<TFunc> = TFunc extends {
   handler: (ctx: any, args: infer TArgs) => any;
 }
@@ -32,7 +34,7 @@ export type ResultOfRef<TRef> = TRef extends { __result: infer TResult } ? TResu
 type ApiResponse<T> = {
   ok: boolean;
   data?: T;
-  error?: string;
+  error?: ConvoyErrorPayload | string;
 };
 
 export type ConvoyClientOptions = {
@@ -66,6 +68,9 @@ async function callApi<T>(
   });
   const payload = (await response.json()) as ApiResponse<T>;
   if (!response.ok || !payload.ok) {
+    if (payload.error && typeof payload.error === 'object') {
+      throw new ConvoyError(payload.error.code, payload.error.message, { details: payload.error.details });
+    }
     throw new Error(payload.error ?? 'Request failed');
   }
   if (payload.data === undefined) {
@@ -115,3 +120,6 @@ export function makeMutationRef<Name extends string, TFunc>(
 ): MutationRef<Name, ArgsOfFunction<TFunc>, ResultOfFunction<TFunc>> {
   return { kind: 'mutation', name } as MutationRef<Name, ArgsOfFunction<TFunc>, ResultOfFunction<TFunc>>;
 }
+
+export { ConvoyError } from './errors';
+export type { ConvoyErrorCode, ConvoyErrorPayload } from './errors';

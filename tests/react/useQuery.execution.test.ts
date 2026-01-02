@@ -2,6 +2,7 @@
 import React, { useEffect } from 'react';
 import { act, cleanup, render } from '@testing-library/react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { Window } from 'happy-dom';
 import { makeMutationRef, makeQueryRef } from '../../src/client.ts';
 import { useMutation, useQuery } from '../../src/react.ts';
 
@@ -23,6 +24,11 @@ function createDeferred<T>(): Deferred<T> {
 
 describe('useQuery execution ordering', () => {
   beforeEach(() => {
+    const window = new Window();
+    window.location.href = 'http://localhost/';
+    (globalThis as any).window = window;
+    (globalThis as any).document = window.document;
+    (globalThis as any).navigator = window.navigator;
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
     delete (globalThis as any).EventSource;
   });
@@ -30,6 +36,9 @@ describe('useQuery execution ordering', () => {
   afterEach(() => {
     cleanup();
     delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
+    delete (globalThis as any).window;
+    delete (globalThis as any).document;
+    delete (globalThis as any).navigator;
   });
 
   it('keeps the latest refetch result when responses resolve out of order', async () => {
