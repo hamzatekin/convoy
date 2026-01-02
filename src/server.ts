@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { sql, type SQL } from 'drizzle-orm';
 import type { Id, TableDefinition } from './types';
-import { encodeId, isUuid, parseId } from './utils/ids';
+import { encodeId, isUuid, parseId } from './schema/ids';
 
 type ArgsShape = z.ZodRawShape;
 type SchemaTables = Record<string, TableDefinition<any, any>>;
