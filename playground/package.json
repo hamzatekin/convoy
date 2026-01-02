@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "convoy:dev": "CONVOY_DEBUG=1 bun run ../scripts/convoy-dev.ts --root .",
-    "convoy:once": "bun run ../scripts/convoy-dev.ts --root . --once",
-    "convoy:server": "bun run convoy/_generated/http.ts",
+    "convoy:dev": "node ../bin/convoy.js dev --root .",
+    "convoy:once": "node ../bin/convoy.js dev --root . --once",
+    "convoy:server": "node --import tsx convoy/_generated/http.ts",
     "typecheck": "tsc --noEmit",
     "dev": "vite",
     "build": "vite build",

@@ -1,20 +1,11 @@
 import { config as loadEnv } from 'dotenv';
 import { Client } from 'pg';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { watch, type FSWatcher } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { watch } from 'node:fs';
 import { access, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
-
-type CliOptions = {
-  rootDir: string;
-  schemaPath?: string;
-  command: 'dev';
-  watch: boolean;
-  serve: boolean;
-};
-
 const SCHEMA_TEMPLATE = `import { z } from "zod";
 import { defineSchema, defineTable } from "convoy";
 
@@ -27,37 +18,15 @@ const schema = defineSchema({
 
 export default schema;
 `;
-
 const FUNCTIONS_DIRNAME = 'functions';
 const GENERATED_DIRNAME = '_generated';
-
-type FunctionExport = {
-  kind: 'query' | 'mutation';
-  exportName: string;
-  fullName: string;
-  pathSegments: string[];
-  moduleVar: string;
-};
-
-interface ApiTree {
-  [key: string]: ApiTree | FunctionExport;
-}
-
-type ModuleInfo = {
-  filePath: string;
-  importPath: string;
-  varName: string;
-  pathSegments: string[];
-};
-
-function parseArgs(argv: string[]): CliOptions {
+function parseArgs(argv) {
   const args = [...argv];
-  let command: CliOptions['command'] = 'dev';
+  let command = 'dev';
   let rootDir = process.cwd();
-  let schemaPath: string | undefined;
+  let schemaPath;
   let watchMode = true;
-  let serveMode: boolean | null = null;
-
+  let serveMode = null;
   if (args[0] && !args[0].startsWith('-')) {
     const maybeCommand = args.shift();
     if (maybeCommand === 'dev') {
@@ -68,7 +37,6 @@ function parseArgs(argv: string[]): CliOptions {
       throw new Error(`Unknown command: ${maybeCommand}`);
     }
   }
-
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--root') {
@@ -113,10 +81,8 @@ function parseArgs(argv: string[]): CliOptions {
       serveMode = false;
       continue;
     }
-
     throw new Error(`Unknown option: ${arg}`);
   }
-
   return {
     command,
     rootDir,
@@ -125,8 +91,7 @@ function parseArgs(argv: string[]): CliOptions {
     serve: serveMode ?? watchMode,
   };
 }
-
-function toImportPath(fromDir: string, filePath: string, options: { stripExtension?: boolean } = {}): string {
+function toImportPath(fromDir, filePath, options = {}) {
   const relative = path.relative(fromDir, filePath);
   let normalized = relative.split(path.sep).join('/');
   const stripExtension = options.stripExtension ?? true;
@@ -139,21 +104,18 @@ function toImportPath(fromDir: string, filePath: string, options: { stripExtensi
   }
   return normalized.startsWith('.') ? normalized : `./${normalized}`;
 }
-
-async function resolveRuntimeImport(rootDir: string, generatedDir: string): Promise<string> {
+async function resolveRuntimeImport(rootDir, generatedDir) {
   const override = process.env.CONVOY_RUNTIME_IMPORT;
   if (override) {
     return override;
   }
-
   const parentDir = path.resolve(rootDir, '..');
   const localSrc = path.join(parentDir, 'src', 'index.ts');
   const localPackage = path.join(parentDir, 'package.json');
-
   if (await pathExists(localSrc)) {
     try {
       const raw = await readFile(localPackage, 'utf8');
-      const pkg = JSON.parse(raw) as { name?: string };
+      const pkg = JSON.parse(raw);
       if (pkg.name === 'convoy') {
         return toImportPath(generatedDir, localSrc);
       }
@@ -161,24 +123,20 @@ async function resolveRuntimeImport(rootDir: string, generatedDir: string): Prom
       // fall back to package import
     }
   }
-
   return 'convoy';
 }
-
-async function resolveNodeRuntimeImport(rootDir: string, generatedDir: string): Promise<string> {
+async function resolveNodeRuntimeImport(rootDir, generatedDir) {
   const override = process.env.CONVOY_NODE_RUNTIME_IMPORT;
   if (override) {
     return override;
   }
-
   const parentDir = path.resolve(rootDir, '..');
   const localSrc = path.join(parentDir, 'src', 'node.ts');
   const localPackage = path.join(parentDir, 'package.json');
-
   if (await pathExists(localSrc)) {
     try {
       const raw = await readFile(localPackage, 'utf8');
-      const pkg = JSON.parse(raw) as { name?: string };
+      const pkg = JSON.parse(raw);
       if (pkg.name === 'convoy') {
         return toImportPath(generatedDir, localSrc);
       }
@@ -186,14 +144,12 @@ async function resolveNodeRuntimeImport(rootDir: string, generatedDir: string): 
       // fall back to package import
     }
   }
-
   return 'convoy/node';
 }
-
-async function listFunctionFiles(dir: string): Promise<string[]> {
+async function listFunctionFiles(dir) {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
-    const files: string[] = [];
+    const files = [];
     for (const entry of entries) {
       if (entry.name.startsWith('.')) {
         continue;
@@ -220,21 +176,18 @@ async function listFunctionFiles(dir: string): Promise<string[]> {
     return [];
   }
 }
-
-function isConvoyFunction(value: unknown): value is { kind: 'query' | 'mutation' } {
+function isConvoyFunction(value) {
   if (!value || typeof value !== 'object') {
     return false;
   }
-  const kind = (value as { kind?: unknown }).kind;
+  const kind = value.kind;
   return kind === 'query' || kind === 'mutation';
 }
-
-function isFunctionExport(value: unknown): value is FunctionExport {
+function isFunctionExport(value) {
   return Boolean(value && typeof value === 'object' && 'kind' in value && 'fullName' in value);
 }
-
-function buildApiTree(exportsList: FunctionExport[]): ApiTree {
-  const tree: ApiTree = {};
+function buildApiTree(exportsList) {
+  const tree = {};
   for (const entry of exportsList) {
     let current = tree;
     const segments = entry.pathSegments;
@@ -247,7 +200,7 @@ function buildApiTree(exportsList: FunctionExport[]): ApiTree {
       if (!next) {
         current[segment] = {};
       }
-      current = current[segment] as ApiTree;
+      current = current[segment];
     }
     const leaf = segments[segments.length - 1];
     if (current[leaf]) {
@@ -257,10 +210,7 @@ function buildApiTree(exportsList: FunctionExport[]): ApiTree {
   }
   return tree;
 }
-
-type ApiLeafRenderer = (key: string, entry: FunctionExport, indent: string) => string;
-
-function renderApiTree(tree: ApiTree, indent: string, renderLeaf: ApiLeafRenderer): string {
+function renderApiTree(tree, indent, renderLeaf) {
   const entries = Object.entries(tree).sort(([a], [b]) => a.localeCompare(b));
   if (entries.length === 0) {
     return '{}';
@@ -270,12 +220,11 @@ function renderApiTree(tree: ApiTree, indent: string, renderLeaf: ApiLeafRendere
     if (isFunctionExport(value)) {
       return renderLeaf(key, value, nextIndent);
     }
-    return `${nextIndent}${key}: ${renderApiTree(value as ApiTree, nextIndent, renderLeaf)}`;
+    return `${nextIndent}${key}: ${renderApiTree(value, nextIndent, renderLeaf)}`;
   });
   return `{\n${lines.join(',\n')}\n${indent}}`;
 }
-
-function renderApiFile(modules: ModuleInfo[], tree: ApiTree, exportsList: FunctionExport[]): string {
+function renderApiFile(modules, tree, exportsList) {
   if (exportsList.length === 0) {
     return `// Generated by convoy dev. Do not edit.\nexport const api = {} as const;\nexport type Api = typeof api;\n`;
   }
@@ -290,8 +239,7 @@ function renderApiFile(modules: ModuleInfo[], tree: ApiTree, exportsList: Functi
   });
   return `// Generated by convoy dev. Do not edit.\n${importLines.join('\n')}\n\nexport const api = ${apiBody} as const;\n\nexport type Api = typeof api;\n`;
 }
-
-function renderApiTypesFile(modules: ModuleInfo[], tree: ApiTree, exportsList: FunctionExport[]): string {
+function renderApiTypesFile(modules, tree, exportsList) {
   if (exportsList.length === 0) {
     return `// Generated by convoy dev. Do not edit.\nexport declare const api: {};\nexport type Api = typeof api;\n`;
   }
@@ -324,8 +272,7 @@ function renderApiTypesFile(modules: ModuleInfo[], tree: ApiTree, exportsList: F
   ];
   return `// Generated by convoy dev. Do not edit.\n${importLines.join('\n')}\n\n${helperTypes.join('\n')}\n\nexport declare const api: ${apiBody};\n\nexport type Api = typeof api;\n`;
 }
-
-function renderFunctionMap(exportsList: FunctionExport[], kind: 'query' | 'mutation'): string {
+function renderFunctionMap(exportsList, kind) {
   const entries = exportsList
     .filter((entry) => entry.kind === kind)
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -335,8 +282,7 @@ function renderFunctionMap(exportsList: FunctionExport[], kind: 'query' | 'mutat
   const lines = entries.map((entry) => `  "${entry.fullName}": ${entry.moduleVar}.${entry.exportName}`);
   return `{\n${lines.join(',\n')}\n}`;
 }
-
-function renderFunctionsFile(modules: ModuleInfo[], exportsList: FunctionExport[]): string {
+function renderFunctionsFile(modules, exportsList) {
   if (exportsList.length === 0) {
     return `// Generated by convoy dev. Do not edit.\nexport const queries = {} as const;\nexport const mutations = {} as const;\nexport type QueryName = keyof typeof queries;\nexport type MutationName = keyof typeof mutations;\n`;
   }
@@ -345,20 +291,17 @@ function renderFunctionsFile(modules: ModuleInfo[], exportsList: FunctionExport[
   const mutations = renderFunctionMap(exportsList, 'mutation');
   return `// Generated by convoy dev. Do not edit.\n${importLines.join('\n')}\n\nexport const queries = ${queries} as const;\n\nexport const mutations = ${mutations} as const;\n\nexport type QueryName = keyof typeof queries;\nexport type MutationName = keyof typeof mutations;\n`;
 }
-
-async function generateApi(rootDir: string, options: { cacheBust?: boolean } = {}): Promise<void> {
+async function generateApi(rootDir, options = {}) {
   const convoyDir = path.join(rootDir, 'convoy');
   const functionsDir = path.join(convoyDir, FUNCTIONS_DIRNAME);
   const generatedDir = path.join(convoyDir, GENERATED_DIRNAME);
   await mkdir(functionsDir, { recursive: true });
   await mkdir(generatedDir, { recursive: true });
   const cacheBust = options.cacheBust ?? false;
-
   const functionFiles = await listFunctionFiles(functionsDir);
-  const modules: ModuleInfo[] = [];
-  const exportsList: FunctionExport[] = [];
+  const modules = [];
+  const exportsList = [];
   let moduleIndex = 0;
-
   for (const filePath of functionFiles) {
     const relative = path.relative(functionsDir, filePath);
     const parsed = path.parse(relative);
@@ -375,7 +318,6 @@ async function generateApi(rootDir: string, options: { cacheBust?: boolean } = {
       varName: moduleVar,
       pathSegments: segments,
     });
-
     const moduleUrl = pathToFileURL(filePath).href;
     const importUrl = cacheBust ? `${moduleUrl}?t=${Date.now()}` : moduleUrl;
     const moduleExports = await import(importUrl);
@@ -394,33 +336,27 @@ async function generateApi(rootDir: string, options: { cacheBust?: boolean } = {
       });
     }
   }
-
-  const seenNames = new Set<string>();
+  const seenNames = new Set();
   for (const entry of exportsList) {
     if (seenNames.has(entry.fullName)) {
       throw new Error(`Duplicate function name "${entry.fullName}"`);
     }
     seenNames.add(entry.fullName);
   }
-
   const apiTree = buildApiTree(exportsList);
   const apiContent = renderApiFile(modules, apiTree, exportsList);
   const apiTypesContent = renderApiTypesFile(modules, apiTree, exportsList);
   const functionsContent = renderFunctionsFile(modules, exportsList);
-
   await writeFileIfChanged(path.join(generatedDir, 'api.ts'), apiContent);
   await writeFileIfChanged(path.join(generatedDir, 'api.d.ts'), apiTypesContent);
   await writeFileIfChanged(path.join(generatedDir, 'functions.ts'), functionsContent);
 }
-
-async function generateServer(rootDir: string, schemaPath: string): Promise<void> {
+async function generateServer(rootDir, schemaPath) {
   const convoyDir = path.join(rootDir, 'convoy');
   const generatedDir = path.join(convoyDir, GENERATED_DIRNAME);
   await mkdir(generatedDir, { recursive: true });
-
   const schemaImport = toImportPath(generatedDir, schemaPath);
   const runtimeImport = await resolveRuntimeImport(rootDir, generatedDir);
-
   const content = `// Generated by convoy dev. Do not edit.
 import schema from "${schemaImport}";
 import { createFunctionHelpers, type ConvoyContext, type DbFromSchema } from "${runtimeImport}";
@@ -432,18 +368,14 @@ const helpers = createFunctionHelpers<ServerContext>();
 export const query = helpers.query;
 export const mutation = helpers.mutation;
 `;
-
   await writeFileIfChanged(path.join(generatedDir, 'server.ts'), content);
 }
-
-async function generateServerTypes(rootDir: string, schemaPath: string): Promise<void> {
+async function generateServerTypes(rootDir, schemaPath) {
   const convoyDir = path.join(rootDir, 'convoy');
   const generatedDir = path.join(convoyDir, GENERATED_DIRNAME);
   await mkdir(generatedDir, { recursive: true });
-
   const schemaImport = toImportPath(generatedDir, schemaPath);
   const runtimeImport = await resolveRuntimeImport(rootDir, generatedDir);
-
   const content = `// Generated by convoy dev. Do not edit.
 import type schema from "${schemaImport}";
 import type {
@@ -467,19 +399,15 @@ export declare const mutation: <TInput extends InputShape, TResult>(
   definition: ConvoyFunctionDefinition<ServerContext, TInput, TResult>,
 ) => ConvoyFunction<ServerContext, TInput, TResult>;
 `;
-
   await writeFileIfChanged(path.join(generatedDir, 'server.d.ts'), content);
 }
-
-async function generateHttpServer(rootDir: string, schemaPath: string): Promise<void> {
+async function generateHttpServer(rootDir, schemaPath) {
   const convoyDir = path.join(rootDir, 'convoy');
   const generatedDir = path.join(convoyDir, GENERATED_DIRNAME);
   await mkdir(generatedDir, { recursive: true });
-
   const schemaImport = toImportPath(generatedDir, schemaPath);
   const runtimeImport = await resolveRuntimeImport(rootDir, generatedDir);
   const nodeRuntimeImport = await resolveNodeRuntimeImport(rootDir, generatedDir);
-
   const content = `// Generated by convoy dev. Do not edit.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import process from "node:process";
@@ -796,18 +724,14 @@ if (isMain) {
   });
 }
 `;
-
   await writeFileIfChanged(path.join(generatedDir, 'http.ts'), content);
 }
-
-async function generateDataModelTypes(rootDir: string, schemaPath: string): Promise<void> {
+async function generateDataModelTypes(rootDir, schemaPath) {
   const convoyDir = path.join(rootDir, 'convoy');
   const generatedDir = path.join(convoyDir, GENERATED_DIRNAME);
   await mkdir(generatedDir, { recursive: true });
-
   const schemaImport = toImportPath(generatedDir, schemaPath);
   const runtimeImport = await resolveRuntimeImport(rootDir, generatedDir);
-
   const content = `// Generated by convoy dev. Do not edit.
 import type schema from "${schemaImport}";
 import type { Id, InferTableRow } from "${runtimeImport}";
@@ -817,22 +741,18 @@ export type TableName = keyof DataModel & string;
 export type Doc<TName extends TableName> =
   InferTableRow<DataModel[TName]> & { id: Id<TName> };
 `;
-
   await writeFileIfChanged(path.join(generatedDir, 'dataModel.d.ts'), content);
 }
-
-function quoteIdent(name: string): string {
+function quoteIdent(name) {
   if (name.length === 0) {
     throw new Error('Database and table names cannot be empty');
   }
   return `"${name.replace(/"/g, '""')}"`;
 }
-
-function quoteLiteral(value: string): string {
+function quoteLiteral(value) {
   return `'${value.replace(/'/g, "''")}'`;
 }
-
-async function pathExists(filePath: string): Promise<boolean> {
+async function pathExists(filePath) {
   try {
     await access(filePath);
     return true;
@@ -840,8 +760,7 @@ async function pathExists(filePath: string): Promise<boolean> {
     return false;
   }
 }
-
-async function writeFileIfChanged(filePath: string, nextContent: string): Promise<boolean> {
+async function writeFileIfChanged(filePath, nextContent) {
   try {
     const current = await readFile(filePath, 'utf8');
     if (current === nextContent) {
@@ -853,8 +772,7 @@ async function writeFileIfChanged(filePath: string, nextContent: string): Promis
   await writeFile(filePath, nextContent, 'utf8');
   return true;
 }
-
-async function loadSchemaModule(schemaPath: string, cacheBust = false): Promise<Record<string, any>> {
+async function loadSchemaModule(schemaPath, cacheBust = false) {
   try {
     const moduleUrl = pathToFileURL(schemaPath).href;
     const importUrl = cacheBust ? `${moduleUrl}?t=${Date.now()}` : moduleUrl;
@@ -863,7 +781,7 @@ async function loadSchemaModule(schemaPath: string, cacheBust = false): Promise<
     if (!schema || typeof schema !== 'object') {
       throw new Error('schema.ts must export a schema object (default or named)');
     }
-    return schema as Record<string, any>;
+    return schema;
   } catch (error) {
     const isBun = Boolean(process.versions?.bun);
     const isTypeScript = schemaPath.endsWith('.ts');
@@ -873,27 +791,22 @@ async function loadSchemaModule(schemaPath: string, cacheBust = false): Promise<
     throw error;
   }
 }
-
-function loadEnvFiles(rootDir: string): void {
+function loadEnvFiles(rootDir) {
   const rootEnv = path.join(rootDir, '.env');
   loadEnv({ path: rootEnv });
-
   const cwdEnv = path.join(process.cwd(), '.env');
   if (cwdEnv !== rootEnv) {
     loadEnv({ path: cwdEnv });
   }
 }
-
-async function ensureDatabase(databaseUrl: string): Promise<void> {
+async function ensureDatabase(databaseUrl) {
   const targetUrl = new URL(databaseUrl);
   const dbName = decodeURIComponent(targetUrl.pathname.replace(/^\//, ''));
   if (!dbName) {
     throw new Error('DATABASE_URL must include a database name');
   }
-
   const adminUrl = new URL(databaseUrl);
   adminUrl.pathname = '/postgres';
-
   const adminClient = new Client({ connectionString: adminUrl.toString() });
   await adminClient.connect();
   const exists = await adminClient.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName]);
@@ -902,26 +815,22 @@ async function ensureDatabase(databaseUrl: string): Promise<void> {
   }
   await adminClient.end();
 }
-
-async function ensureTables(databaseUrl: string, schema: Record<string, any>): Promise<string[]> {
+async function ensureTables(databaseUrl, schema) {
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
-
-  const createdTables: string[] = [];
+  const createdTables = [];
   for (const [key, table] of Object.entries(schema)) {
     if (!table || typeof table !== 'object') {
       throw new Error(`Invalid table definition for "${key}"`);
     }
     const tableName = String(table.name ?? key);
-    await client.query(
-      `CREATE TABLE IF NOT EXISTS ${quoteIdent(tableName)} (
+    await client.query(`CREATE TABLE IF NOT EXISTS ${quoteIdent(tableName)} (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
         data jsonb NOT NULL DEFAULT '{}'::jsonb
-      )`,
-    );
+      )`);
     const indexes = table.indexes ?? {};
     for (const [indexName, fields] of Object.entries(indexes)) {
       if (!Array.isArray(fields) || fields.length === 0) {
@@ -934,34 +843,28 @@ async function ensureTables(databaseUrl: string, schema: Record<string, any>): P
     }
     createdTables.push(tableName);
   }
-
   await client.end();
   return createdTables;
 }
-
-function resolveSchemaPath(options: CliOptions, rootDir: string): { convoyDir: string; schemaPath: string } {
+function resolveSchemaPath(options, rootDir) {
   const convoyDir = path.join(rootDir, 'convoy');
   const schemaPath = options.schemaPath ? path.resolve(rootDir, options.schemaPath) : path.join(convoyDir, 'schema.ts');
   return { convoyDir, schemaPath };
 }
-
-async function syncOnce(options: CliOptions, cacheBust = false): Promise<void> {
+async function syncOnce(options, cacheBust = false) {
   const rootDir = path.resolve(options.rootDir);
   const { convoyDir, schemaPath } = resolveSchemaPath(options, rootDir);
   await mkdir(convoyDir, { recursive: true });
-
   const schemaExists = await pathExists(schemaPath);
   if (!schemaExists) {
     await writeFile(schemaPath, SCHEMA_TEMPLATE, 'utf8');
     console.log(`Created ${schemaPath}`);
   }
-
   loadEnvFiles(rootDir);
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error('DATABASE_URL is missing. Add it to your environment or .env file.');
   }
-
   const schema = await loadSchemaModule(schemaPath, cacheBust);
   await ensureDatabase(databaseUrl);
   const tables = await ensureTables(databaseUrl, schema);
@@ -973,15 +876,13 @@ async function syncOnce(options: CliOptions, cacheBust = false): Promise<void> {
   await generateDataModelTypes(rootDir, schemaPath);
   console.log('Generated Convoy bindings');
 }
-
-async function startDevServer(rootDir: string): Promise<ChildProcess | null> {
+async function startDevServer(rootDir) {
   const entryPath = path.join(rootDir, 'convoy', GENERATED_DIRNAME, 'http.ts');
   const exists = await pathExists(entryPath);
   if (!exists) {
     console.error(`Missing ${entryPath}. Run convoy dev once to generate it.`);
     return null;
   }
-
   const env = { ...process.env };
   const override = process.env.CONVOY_DEV_SERVER_CMD;
   if (override) {
@@ -992,7 +893,6 @@ async function startDevServer(rootDir: string): Promise<ChildProcess | null> {
       env,
     });
   }
-
   const isBun = Boolean(process.versions?.bun);
   let args = [entryPath];
   if (entryPath.endsWith('.ts') && !isBun) {
@@ -1007,12 +907,11 @@ async function startDevServer(rootDir: string): Promise<ChildProcess | null> {
     env,
   });
 }
-
-async function stopDevServer(server: ChildProcess | null): Promise<void> {
+async function stopDevServer(server) {
   if (!server || server.killed) {
     return;
   }
-  await new Promise<void>((resolve) => {
+  await new Promise((resolve) => {
     let resolved = false;
     const finalize = () => {
       if (!resolved) {
@@ -1030,16 +929,13 @@ async function stopDevServer(server: ChildProcess | null): Promise<void> {
     }, 2000);
   });
 }
-
-function isIgnoredPath(filePath: string): boolean {
+function isIgnoredPath(filePath) {
   const parts = filePath.split(path.sep);
   return parts.includes(GENERATED_DIRNAME) || parts.includes('node_modules');
 }
-
-async function watchConvoyDir(convoyDir: string, onChange: (filePath: string | null) => void): Promise<() => void> {
-  const watchers = new Map<string, FSWatcher>();
-
-  const watchDir = async (dir: string): Promise<void> => {
+async function watchConvoyDir(convoyDir, onChange) {
+  const watchers = new Map();
+  const watchDir = async (dir) => {
     if (watchers.has(dir)) {
       return;
     }
@@ -1063,7 +959,6 @@ async function watchConvoyDir(convoyDir: string, onChange: (filePath: string | n
       }
     });
     watchers.set(dir, watcher);
-
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) {
@@ -1078,9 +973,7 @@ async function watchConvoyDir(convoyDir: string, onChange: (filePath: string | n
       await watchDir(path.join(dir, entry.name));
     }
   };
-
   await watchDir(convoyDir);
-
   return () => {
     for (const watcher of watchers.values()) {
       watcher.close();
@@ -1088,19 +981,16 @@ async function watchConvoyDir(convoyDir: string, onChange: (filePath: string | n
     watchers.clear();
   };
 }
-
-async function watchCommand(options: CliOptions): Promise<void> {
+async function watchCommand(options) {
   const rootDir = path.resolve(options.rootDir);
   const { convoyDir } = resolveSchemaPath(options, rootDir);
   await syncOnce(options, true);
-
-  let pendingTimer: NodeJS.Timeout | null = null;
+  let pendingTimer = null;
   let running = false;
   let rerun = false;
-  let serverProcess: ChildProcess | null = null;
+  let serverProcess = null;
   let restartingServer = false;
   let restartQueued = false;
-
   const restartServer = async () => {
     if (!options.serve) {
       return;
@@ -1122,7 +1012,6 @@ async function watchCommand(options: CliOptions): Promise<void> {
     }
   };
   await restartServer();
-
   const runSync = async () => {
     if (running) {
       rerun = true;
@@ -1146,7 +1035,6 @@ async function watchCommand(options: CliOptions): Promise<void> {
       await restartServer();
     }
   };
-
   const schedule = () => {
     if (pendingTimer) {
       clearTimeout(pendingTimer);
@@ -1156,7 +1044,6 @@ async function watchCommand(options: CliOptions): Promise<void> {
       runSync();
     }, 100);
   };
-
   const closeWatchers = await watchConvoyDir(convoyDir, () => schedule());
   const shutdown = () => {
     closeWatchers();
@@ -1166,8 +1053,7 @@ async function watchCommand(options: CliOptions): Promise<void> {
   process.once('SIGTERM', shutdown);
   console.log(`Watching ${convoyDir} for changes...`);
 }
-
-async function main(): Promise<void> {
+async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.command === 'dev') {
     if (options.watch) {
@@ -1179,17 +1065,15 @@ async function main(): Promise<void> {
       const rootDir = path.resolve(options.rootDir);
       const server = await startDevServer(rootDir);
       if (server) {
-        await new Promise<void>((resolve) => {
+        await new Promise((resolve) => {
           server.once('exit', () => resolve());
         });
       }
     }
     return;
   }
-
   throw new Error(`Unknown command: ${options.command}`);
 }
-
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;

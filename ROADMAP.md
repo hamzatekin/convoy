@@ -1,115 +1,111 @@
-# Convoy Roadmap (V1+)
+# Convoy Roadmap
 
-Convex-style DX on user-owned Postgres with JSONB as the default model.
+This roadmap shows where Convoy is today and what lies ahead.  
+The goal of **v1** is not more features, but **stability, trust, and production readiness**.
 
-## Foundations (current)
+---
 
-- Schema-first JSONB tables + indexes (done for POC)
-- Typed query/mutation functions (done for POC)
-- HTTP API + generated bindings (done for POC)
+## ✅ MVP (DONE)
 
-## M0 - Dev DX + HTTP baseline
+> Proof that the core idea works and the DX is real.
 
-Deliverables:
+- [x] Postgres-backed **JSONB document model**
+- [x] **Schema-first** design using Zod (runtime validation + type inference)
+- [x] **Queries & mutations** as server functions (no user-defined routes)
+- [x] CLI that:
+  - watches schema & functions
+  - syncs DB tables and indexes (create-if-missing)
+  - generates typed client APIs
+  - starts the runtime server
+- [x] **End-to-end type safety** (schema → server → client hooks)
+- [x] HTTP gateway as a transport detail
+- [x] **Reactive queries**
+  - SSE subscriptions
+  - server-pushed authoritative updates
+- [x] Postgres **LISTEN / NOTIFY**–based invalidation
+- [x] Automatic UI updates without manual refetch
+- [x] Fully **self-hosted** (users own their Postgres)
 
-- [Improvement] `convoy dev` watches schema/functions and starts the local HTTP server
-- [Improvement] Standard `/api/query|mutation/:name` router using `_generated/functions.ts`
-- [Improvement] Structured error responses + request size limits
-- [Improvement] Example playground using the generated server (no Vite middleware)
+---
 
-Cut line:
+## 🎯 v1 (NEXT)
 
-- No realtime support
-- No TanStack Query integration
+> Make Convoy something you can confidently run in production.
 
-Done when:
+### Runtime & Sync Hardening
 
-- A project can run `convoy dev` and the app can call queries/mutations end-to-end
+- [ ] Stable SSE reconnect behavior
+- [ ] Full re-sync on reconnect or missed events
+- [ ] Limits & safeguards:
+  - max concurrent subscriptions
+  - payload size limits
+- [ ] Deterministic query execution guarantees
+- [ ] Clear mutation boundaries (no partial state leaks)
 
-## M1 - Safe schema sync
+### Error Handling & DX Polish
 
-Deliverables:
+- [ ] Structured error codes (`UNAUTHORIZED`, `INVALID_ARGS`, etc.)
+- [ ] Typed error responses (not just strings)
+- [ ] Better client-side error states in hooks
+- [ ] Clear loading / stale / reconnect states
 
-- [New] `convoy sync` (server/CI) separate from `convoy dev`
-- [Improvement] "Never drop" default + `--dry-run` schema diff output
-- [New] Schema hash + sync log table
-- [Improvement] Docs for running sync only in server/CI contexts
+### Auth as First-Class Context (Not a Service)
 
-Cut line:
+- [ ] Official `createContext(req)` pattern
+- [ ] Auth resolved once per request
+- [ ] Example integrations:
+  - JWT
+  - Cookie-based sessions
+- [ ] Documentation for auth best practices
+- [ ] No auth lock-in or hosted auth dependency
 
-- No relational promotion yet
+### Schema & Deployment Workflow
 
-Done when:
+- [ ] Clear separation between:
+  - `convoy dev` (auto-sync, fast iteration)
+  - `convoy deploy` / `convoy migrate` (explicit, safe)
+- [ ] Warnings for destructive or incompatible schema changes
+- [ ] Non-destructive defaults
+- [ ] Clear production deployment guidance
 
-- Schema updates are applied only through controlled server/CI paths
+### Escape Hatches (Trust Builders)
 
-## M2 - Type safety + client integration
+- [ ] Raw SQL escape hatch (`ctx.db.raw(...)`)
+- [ ] Ability to opt out of Convoy for specific tables
+- [ ] Clear guidance on mixing Convoy with traditional backends
+- [ ] Documented “how to eject” story
 
-Deliverables:
+### Documentation & Positioning
 
-- [Improvement] Generated `api.d.ts`, `server.d.ts`, `dataModel.d.ts` (no server code in client bundles)
-- [New] Optional TanStack Query adapter (`@convoy/react-query`)
-- [Improvement] Clear docs on typed refs + hooks
-- [New] Enforce read-only queries (no writes in queries) with runtime guard + typings
+- [ ] Clear mental model documentation
+- [ ] Data flow diagrams (simple, high-level)
+- [ ] “What Convoy is / is not”
+- [ ] Comparison with REST and Convex
+- [ ] Explicit tradeoffs and limitations
 
-Cut line:
+---
 
-- No realtime invalidation yet
+## 🚀 Post-v1 (FUTURE)
 
-Done when:
+> Power features that build on a stable core.
 
-- Client DX matches Convex-style type safety without bundling server code
+- [ ] WebSocket transport (alternative to SSE)
+- [ ] Mobile-friendly subscription transport
+- [ ] Optional advanced client adapters (e.g. TanStack Query)
+- [ ] Guided JSONB → relational “graduation” tooling
+- [ ] Schema drift analysis & reporting
+- [ ] Observability hooks (logging, metrics)
+- [ ] Optional managed hosting (Convoy Cloud)
+- [ ] Team / multi-project tooling
 
-## M3 - Auth + policy layer
+---
 
-Deliverables:
+## v1 Definition of Done
 
-- [New] Standard `ctx.auth` shape
-- [New] Middleware for auth extraction
-- [New] Table-level read/write rules
-- [Improvement] Tests for enforcement + examples
+Convoy can be considered **v1** when:
 
-Cut line:
-
-- No multi-tenant row-level security in SQL yet
-
-Done when:
-
-- Teams can implement allow/deny rules without per-function guards
-
-## M4 - JSONB to relational promotion
-
-Deliverables:
-
-- [New] `convoy promote` to generate SQL for columns + indexes
-- [New] Dual-read/dual-write helpers
-- [New] Backfill tool + migration docs
-
-Cut line:
-
-- No automated rollback
-
-Done when:
-
-- Hot fields can be promoted without breaking API types
-
-## M5 - Realtime + ElectricSQL sync
-
-Deliverables:
-
-- [New] ElectricSQL integration plan + starter adapter
-- [New] Mutation invalidation events (LISTEN/NOTIFY or pub/sub adapter)
-- [New] Server broadcast layer
-- [Improvement] Swap SSE subscriptions for WebSocket transport (mobile reliability)
-
-Notes:
-
-- This is the sync revenue driver; prioritize when core DX stabilizes.
-
-Cut line:
-
-- Offline/CRDT support not in scope
-
-Done when:
-
-- Mutations trigger deterministic invalidation and a sync path is defined
+- It is stable under real production load
+- Reactive queries are reliable and predictable
+- Auth and errors are well-defined and boring
+- Schema and deployment workflows are explicit
+- Users feel confident they can escape or extend when needed
