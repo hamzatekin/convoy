@@ -46,6 +46,9 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=18.19"
+  },
   "publishConfig": {
     "access": "public"
   },

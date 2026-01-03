@@ -27,6 +27,8 @@ Start fast with **JSONB document tables**, iterate quickly, and keep a clear pat
 npm install convoy zod
 ```
 
+Requires Node `>=18.19` (or Bun) for the CLI.
+
 ---
 
 ## Core Concepts
