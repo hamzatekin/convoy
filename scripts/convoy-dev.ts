@@ -1,4 +1,3 @@
-import { config as loadEnv } from 'dotenv';
 import { Client } from 'pg';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { watch, type FSWatcher } from 'node:fs';
@@ -906,7 +905,27 @@ async function loadSchemaModule(schemaPath: string, cacheBust = false): Promise<
   }
 }
 
-function loadEnvFiles(rootDir: string): void {
+async function loadEnvFiles(rootDir: string): Promise<void> {
+  let loadEnv: ((options?: { path?: string }) => void) | null = null;
+  try {
+    const dotenv = await import('dotenv');
+    if (typeof dotenv.config === 'function') {
+      loadEnv = dotenv.config;
+    }
+  } catch (error) {
+    const code = error && typeof error === 'object' ? (error as { code?: string }).code : undefined;
+    if (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') {
+      return;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Convoy: dotenv unavailable (${message}). Skipping .env loading.`);
+    return;
+  }
+
+  if (!loadEnv) {
+    return;
+  }
+
   const rootEnv = path.join(rootDir, '.env');
   loadEnv({ path: rootEnv });
 
@@ -997,7 +1016,7 @@ async function syncOnce(options: CliOptions, settings: SyncSettings, cacheBust =
     console.log(`Created ${schemaPath}`);
   }
 
-  loadEnvFiles(rootDir);
+  await loadEnvFiles(rootDir);
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error('DATABASE_URL is missing. Add it to your environment or .env file.');

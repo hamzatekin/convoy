@@ -369,4 +369,4 @@ Near-term (v1):
 
 License
 
-MIT (planned once APIs stabilize)
+MIT
