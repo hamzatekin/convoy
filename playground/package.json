@@ -12,7 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "convoy": "file:..",
+    "@avvos/convoy": "file:..",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "zod": "^4.2.1"

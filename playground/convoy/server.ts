@@ -1,6 +1,6 @@
 // convoy/server.ts
 import type { IncomingMessage } from 'node:http';
-import type { Id } from 'convoy';
+import type { Id } from '@avvos/convoy';
 import type { ServerContext } from './_generated/server';
 
 type AuthContext = ServerContext & {

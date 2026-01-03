@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import type { Id } from 'convoy';
-import type { ConvoyClient } from 'convoy/client';
-import { useMutation } from 'convoy/react';
+import type { Id } from '@avvos/convoy';
+import type { ConvoyClient } from '@avvos/convoy/client';
+import { useMutation } from '@avvos/convoy/react';
 import type { Doc } from '../../convoy/_generated/dataModel';
 import { api } from '../../convoy/_generated/api.ts';
 

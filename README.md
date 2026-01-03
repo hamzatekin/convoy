@@ -24,7 +24,7 @@ Start fast with **JSONB document tables**, iterate quickly, and keep a clear pat
 ## Installation
 
 ```bash
-npm install convoy zod
+npm install @avvos/convoy zod
 ```
 
 Requires Node `>=18.19` (or Bun) for the CLI.
@@ -105,7 +105,7 @@ Create `convoy/schema.ts` in your project root:
 
 ```ts
 // convoy/schema.ts
-import { defineSchema, defineTable, defineRef } from 'convoy';
+import { defineSchema, defineTable, defineRef } from '@avvos/convoy';
 import { z } from 'zod';
 
 export const schema = defineSchema({
@@ -127,7 +127,7 @@ Create files under `convoy/functions`:
 
 ```ts
 // convoy/functions/projects.ts
-import { defineRef } from 'convoy';
+import { defineRef } from '@avvos/convoy';
 import { mutation, query } from '../_generated/server';
 import { z } from 'zod';
 
@@ -159,15 +159,15 @@ export const listProjects = query({
 Run the dev command (watches for changes by default, use `--once` for a single sync):
 
 ```bash
-npx convoy dev
+npx @avvos/convoy dev
 ```
 
 Other package managers:
 
 ```bash
-pnpm dlx convoy dev
-yarn dlx convoy dev
-bunx convoy dev
+pnpm dlx @avvos/convoy dev
+yarn dlx @avvos/convoy dev
+bunx @avvos/convoy dev
 ```
 
 For local development of this repo, use `npm run convoy:dev` or `bun run convoy:dev` (bunx installs from the registry unless you add a local `file:` dependency).
@@ -195,7 +195,7 @@ convoy migrate
 ### 4) Use it on the client (React)
 
 ```ts
-import { skipToken, useMutation, useQuery } from 'convoy/react';
+import { skipToken, useMutation, useQuery } from '@avvos/convoy/react';
 import { api } from '../convoy/_generated/api';
 
 const createProject = useMutation(api.projects.createProject);
@@ -206,7 +206,7 @@ const { data: tasks } = useQuery(api.tasks.listTasks, projectId ? { projectId } 
 Direct client usage (non-React)
 
 ```ts
-import { createConvoyClient } from 'convoy/client';
+import { createConvoyClient } from '@avvos/convoy/client';
 import { api } from '../convoy/_generated/api';
 
 const client = createConvoyClient();
@@ -216,8 +216,8 @@ await client.mutation(api.projects.createProject, { userId, name: 'My App' });
 Structured errors and mutation state:
 
 ```ts
-import { ConvoyError } from 'convoy/client';
-import { useMutationState } from 'convoy/react';
+import { ConvoyError } from '@avvos/convoy/client';
+import { useMutationState } from '@avvos/convoy/react';
 
 const { mutate, isLoading, error } = useMutationState(api.projects.createProject);
 
@@ -242,7 +242,7 @@ If you build a custom server entry, use `createBaseContext(db)` to assemble the 
 // convoy/server.ts
 import type { IncomingMessage } from 'node:http';
 import type { ServerContext } from './_generated/server';
-import { convoyError } from 'convoy';
+import { convoyError } from '@avvos/convoy';
 
 export async function createContext(req: IncomingMessage, base: ServerContext) {
   const token = req.headers.authorization?.replace(/^Bearer /, '');
@@ -280,7 +280,7 @@ export function configureServer({ server }) {
 
 Best DX pattern (recommended):
 
-1. Default: generated server entry (zero config). CLI generates `convoy/_generated/http.ts` with `createBaseContext(db)` wired in, and `npx convoy dev` just works.
+1. Default: generated server entry (zero config). CLI generates `convoy/_generated/http.ts` with `createBaseContext(db)` wired in, and `npx @avvos/convoy dev` just works.
 2. Optional: user-defined server entry (advanced). Create `convoy/server.ts` and export `createContext(req, base)` (and optionally `configureServer`); the CLI auto-detects it and uses it.
 
 Best practices:
@@ -294,7 +294,7 @@ Typed auth helpers:
 
 ```ts
 // convoy/functions/_auth.ts
-import { convoyError, createFunctionHelpers, type Id } from 'convoy';
+import { convoyError, createFunctionHelpers, type Id } from '@avvos/convoy';
 import type { ServerContext } from '../_generated/server';
 
 export type AuthContext = ServerContext & { auth: { userId: Id<'users'> } | null };
@@ -337,7 +337,7 @@ const rows = await ctx.db.raw<{ total: number }>(sql`select count(*) as total fr
 Opt out of table management:
 
 ```ts
-import { defineSchema, defineTable } from 'convoy';
+import { defineSchema, defineTable } from '@avvos/convoy';
 import { z } from 'zod';
 
 export default defineSchema({

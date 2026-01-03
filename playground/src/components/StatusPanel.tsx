@@ -1,4 +1,4 @@
-import type { QueryConnectionState } from 'convoy/react';
+import type { QueryConnectionState } from '@avvos/convoy/react';
 
 type StatusStream = {
   label: string;

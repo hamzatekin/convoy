@@ -1,8 +1,8 @@
 // src/App.tsx
 import { useEffect, useMemo, useState } from 'react';
-import type { Id } from 'convoy';
-import { createConvoyClient } from 'convoy/client';
-import { skipToken, useQuery } from 'convoy/react';
+import type { Id } from '@avvos/convoy';
+import { createConvoyClient } from '@avvos/convoy/client';
+import { skipToken, useQuery } from '@avvos/convoy/react';
 import { api } from '../convoy/_generated/api.ts';
 import type { Doc } from '../convoy/_generated/dataModel';
 import SessionPanel from './components/SessionPanel';

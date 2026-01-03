@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import type { Id } from 'convoy';
-import { ConvoyError, type ConvoyClient } from 'convoy/client';
-import { useMutationState } from 'convoy/react';
+import type { Id } from '@avvos/convoy';
+import { ConvoyError, type ConvoyClient } from '@avvos/convoy/client';
+import { useMutationState } from '@avvos/convoy/react';
 import { api } from '../../convoy/_generated/api.ts';
 
 type AuthMode = 'header' | 'cookie';
