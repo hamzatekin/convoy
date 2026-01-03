@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createQuerySubscriptionManager } from '../../src/node.ts';
-import { createContext, query } from '../../src/server.ts';
+import { createBaseContext, query } from '../../src/server.ts';
 
 type MockResponse = ServerResponse & {
   statusCode: number;
@@ -61,7 +61,7 @@ describe('createQuerySubscriptionManager', () => {
           handler: () => 'ok',
         }),
       },
-      context: createContext({}),
+      context: createBaseContext({}),
       maxSubscriptions: 1,
       heartbeatMs: 0,
     });

@@ -51,7 +51,7 @@ The goal of **v1** is not more features, but **stability, trust, and production 
 
 ### Auth as First-Class Context (Not a Service)
 
-- [x] Official `createContext(req)` pattern
+- [x] Official `createContext(req, base)` pattern
 - [x] Auth resolved once per request
 - [x] Example integrations:
   - [x] JWT

@@ -22,7 +22,7 @@ export type ConvoyContext<TDb> = {
 
 type DefaultContext = ConvoyContext<any>;
 
-export function createContext<TDb>(db: TDb): ConvoyContext<TDb> {
+export function createBaseContext<TDb>(db: TDb): ConvoyContext<TDb> {
   const ctx = { db } as ConvoyContext<TDb>;
   ctx.runQuery = async (fn, input) => {
     if (fn.kind !== 'query') {

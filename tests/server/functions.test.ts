@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createContext, createFunctionHelpers, mutation, query } from '../../src/server.ts';
+import { createBaseContext, createFunctionHelpers, mutation, query } from '../../src/server.ts';
 
 describe('server functions', () => {
   it('parses query input and returns handler result', async () => {
@@ -9,7 +9,7 @@ describe('server functions', () => {
       handler: (_ctx, input) => input.count + 1,
     });
 
-    const ctx = createContext({});
+    const ctx = createBaseContext({});
     await expect(fn.run(ctx, { count: 2 })).resolves.toBe(3);
     await expect(fn.run(ctx, { count: '2' })).rejects.toThrow();
   });
@@ -20,13 +20,13 @@ describe('server functions', () => {
       handler: (_ctx, input) => input.name.toUpperCase(),
     });
 
-    const ctx = createContext({});
+    const ctx = createBaseContext({});
     await expect(fn.run(ctx, { name: 'alpha' })).resolves.toBe('ALPHA');
     await expect(fn.run(ctx, { name: 123 })).rejects.toThrow();
   });
 
-  it('createContext enforces query/mutation kinds', async () => {
-    const ctx = createContext({ flag: true });
+  it('createBaseContext enforces query/mutation kinds', async () => {
+    const ctx = createBaseContext({ flag: true });
     const q = query({
       input: { value: z.number() },
       handler: (context, input) => (context.db.flag ? input.value : 0),

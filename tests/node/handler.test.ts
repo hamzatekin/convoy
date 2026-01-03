@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createNodeHandler } from '../../src/node.ts';
 import { convoyError } from '../../src/errors.ts';
-import { createContext, mutation, query } from '../../src/server.ts';
+import { createBaseContext, mutation, query } from '../../src/server.ts';
 
 type MockResponse = ServerResponse & {
   body: string;
@@ -49,7 +49,7 @@ function createRequest(options: { method: string; url: string; body?: string; he
 }
 
 function createTestContext<TExtra extends Record<string, unknown>>(extra?: TExtra) {
-  const ctx = createContext({});
+  const ctx = createBaseContext({});
   if (extra) {
     Object.assign(ctx as Record<string, unknown>, extra);
   }

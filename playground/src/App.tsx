@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Id } from 'convoy';
 import { createConvoyClient } from 'convoy/client';
-import { useQuery } from 'convoy/react';
+import { skipToken, useQuery } from 'convoy/react';
 import { api } from '../convoy/_generated/api.ts';
 import type { Doc } from '../convoy/_generated/dataModel';
 import SessionPanel from './components/SessionPanel';
@@ -70,7 +70,7 @@ export default function App() {
     },
   );
 
-  const tasksArgs = selectedProjectId ? { projectId: selectedProjectId } : null;
+  const tasksArgs = selectedProjectId ? { projectId: selectedProjectId } : skipToken;
 
   const {
     data: tasks,

@@ -36,7 +36,7 @@ describe('generateHttpServer', () => {
     const content = await readFile(httpPath, 'utf8');
     expect(content).toContain('const overrideContext = options.createContext');
     expect(content).toContain('const resolveContext = overrideContext');
-    expect(content).toContain('createContext(db)');
+    expect(content).toContain('createBaseContext(db)');
     expect(content).not.toContain('userServer');
   });
 

@@ -102,7 +102,7 @@ vs Convex:
 Create `convoy/schema.ts` in your project root:
 
 ```ts
-// src/convoy/schema.ts
+// convoy/schema.ts
 import { defineSchema, defineTable, defineRef } from 'convoy';
 import { z } from 'zod';
 
@@ -170,6 +170,8 @@ bunx convoy dev
 
 For local development of this repo, use `npm run convoy:dev` or `bun run convoy:dev` (bunx installs from the registry unless you add a local `file:` dependency).
 
+Convoy reads `DATABASE_URL` from `process.env`. If you install `dotenv`, the CLI will also load `.env` files automatically; otherwise set env vars yourself.
+
 This will:
 
 - create the database if needed
@@ -178,7 +180,7 @@ This will:
 - generate `convoy/_generated/http.ts` (HTTP + SSE subscriptions)
 - start the local Convoy HTTP server
 
-If `convoy/server.ts` exists, its `createContext` (and optional `configureServer`) is used automatically.
+If `convoy/server.ts` exists, its `createContext(req, base)` (and optional `configureServer`) is used automatically.
 
 Production workflow (explicit, safe):
 
@@ -191,11 +193,12 @@ convoy migrate
 ### 4) Use it on the client (React)
 
 ```ts
-import { useMutation, useQuery } from 'convoy/react';
+import { skipToken, useMutation, useQuery } from 'convoy/react';
 import { api } from '../convoy/_generated/api';
 
 const createProject = useMutation(api.projects.createProject);
 const { data, connectionState, isReconnecting, isStale } = useQuery(api.projects.listProjects, { userId });
+const { data: tasks } = useQuery(api.tasks.listTasks, projectId ? { projectId } : skipToken);
 ```
 
 Direct client usage (non-React)
@@ -230,6 +233,8 @@ try {
 ## Auth via request context
 
 Convoy treats auth as **request-scoped data on your context**. Export `createContext(req, base)` from `convoy/server.ts` and `convoy dev` will pick it up automatically.
+
+If you build a custom server entry, use `createBaseContext(db)` to assemble the base context and then extend it in your request context.
 
 ```ts
 // convoy/server.ts
@@ -273,7 +278,7 @@ export function configureServer({ server }) {
 
 Best DX pattern (recommended):
 
-1. Default: generated server entry (zero config). CLI generates `convoy/_generated/http.ts` with a default `createContext` that wires the DB, and `npx convoy dev` just works.
+1. Default: generated server entry (zero config). CLI generates `convoy/_generated/http.ts` with `createBaseContext(db)` wired in, and `npx convoy dev` just works.
 2. Optional: user-defined server entry (advanced). Create `convoy/server.ts` and export `createContext(req, base)` (and optionally `configureServer`); the CLI auto-detects it and uses it.
 
 Best practices:

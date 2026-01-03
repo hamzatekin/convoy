@@ -9,13 +9,15 @@ type ApiResponse<T> = {
   error?: ConvoyErrorPayload;
 };
 
-type FunctionMap<TContext> = Record<string, ConvoyFunction<TContext, any, any>>;
+type FunctionMap<TContext extends object> = Record<string, ConvoyFunction<TContext, any, any>>;
 
-export type ConvoyNodeHandlerOptions<TContext> = {
+type ContextProvider<TContext extends object> =
+  | { createContext: (req: IncomingMessage) => TContext | Promise<TContext>; context?: never }
+  | { context: TContext; createContext?: never };
+
+export type ConvoyNodeHandlerOptions<TContext extends object> = ContextProvider<TContext> & {
   queries: FunctionMap<TContext>;
   mutations: FunctionMap<TContext>;
-  createContext?: (req: IncomingMessage) => TContext | Promise<TContext>;
-  context?: TContext;
   basePath?: string;
   maxBodySize?: number;
   subscribePath?: string;
@@ -31,23 +33,18 @@ const DEFAULT_MAX_BODY_SIZE = 1024 * 1024;
 const DEFAULT_SSE_RETRY_MS = 1000;
 const DEFAULT_SSE_HEARTBEAT_MS = 25000;
 
-export type ConvoyMutationEvent<TContext> = {
+export type ConvoyMutationEvent<TContext extends object> = {
   name: string;
   input: unknown;
   result: unknown;
   context: TContext;
 };
 
-type ContextProvider<TContext> = {
-  createContext?: (req: IncomingMessage) => TContext | Promise<TContext>;
-  context?: TContext;
-};
-
 type QuerySubscriptionMessage =
   | { type: 'result'; name: string; ts: number; data: unknown }
   | { type: 'error'; name: string; ts: number; error: ConvoyErrorPayload };
 
-type QuerySubscription<TContext> = {
+type QuerySubscription<TContext extends object> = {
   res: ServerResponse;
   name: string;
   args: unknown;
@@ -58,7 +55,7 @@ type QuerySubscription<TContext> = {
   heartbeat: ReturnType<typeof setInterval> | null;
 };
 
-export type ConvoyQuerySubscriptionManagerOptions<TContext> = ContextProvider<TContext> & {
+export type ConvoyQuerySubscriptionManagerOptions<TContext extends object> = ContextProvider<TContext> & {
   queries: FunctionMap<TContext>;
   maxSubscriptions?: number;
   retryMs?: number;
@@ -79,7 +76,7 @@ function normalizeBasePath(basePath: string): string {
   return withSlash;
 }
 
-async function notifyMutation<TContext>(
+async function notifyMutation<TContext extends object>(
   options: ConvoyNodeHandlerOptions<TContext>,
   event: ConvoyMutationEvent<TContext>,
 ): Promise<void> {
@@ -129,7 +126,7 @@ async function readBody(req: IncomingMessage, maxBodySize: number): Promise<stri
   });
 }
 
-function resolveContext<TContext>(
+function resolveContext<TContext extends object>(
   options: ContextProvider<TContext>,
   req: IncomingMessage,
 ): TContext | Promise<TContext> {
@@ -164,7 +161,7 @@ function normalizeError(error: unknown): { status: number; payload: ConvoyErrorP
   return { status: 500, payload: { code: 'INTERNAL', message } };
 }
 
-export function createQuerySubscriptionManager<TContext>(
+export function createQuerySubscriptionManager<TContext extends object>(
   options: ConvoyQuerySubscriptionManagerOptions<TContext>,
 ): ConvoyQuerySubscriptionManager {
   const subscriptions = new Set<QuerySubscription<TContext>>();
@@ -267,7 +264,7 @@ export function createQuerySubscriptionManager<TContext>(
 
     let context: TContext | Promise<TContext>;
     try {
-      context = resolveContext(options, req);
+      context = resolveContext<TContext>(options, req);
     } catch {
       res.statusCode = 500;
       res.end('Missing context');
@@ -354,7 +351,9 @@ export function createQuerySubscriptionManager<TContext>(
   return { subscribe, refreshAll };
 }
 
-export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TContext>): ConvoyNodeHandler {
+export function createNodeHandler<TContext extends object>(
+  options: ConvoyNodeHandlerOptions<TContext>,
+): ConvoyNodeHandler {
   const basePath = normalizeBasePath(options.basePath ?? '/api');
   const subscribePath = options.onSubscribe
     ? normalizeBasePath(options.subscribePath ?? `${basePath}/subscribe`)
@@ -420,7 +419,7 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
     }
 
     try {
-      const ctx = await resolveContext(options, req);
+      const ctx = await resolveContext<TContext>(options, req);
       const fn = kind === 'mutation' ? mutations[name] : kind === 'query' ? queries[name] : undefined;
       if (!fn) {
         sendError(res, 404, 'NOT_FOUND', 'Unknown endpoint');
@@ -445,7 +444,7 @@ export function createNodeHandler<TContext>(options: ConvoyNodeHandlerOptions<TC
   };
 }
 
-export function createNodeServer<TContext>(
+export function createNodeServer<TContext extends object>(
   options: ConvoyNodeHandlerOptions<TContext> & {
     onUnhandled?: UnhandledRequestHandler;
   },

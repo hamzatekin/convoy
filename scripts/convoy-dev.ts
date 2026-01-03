@@ -632,15 +632,15 @@ type UserConfigureServer = (options: {
     throw new Error("Expected ${userServer.displayPath} to export createContext(req)");
   };
   const resolveContext = overrideContext
-    ? (req: IncomingMessage) => overrideContext(req, createContext(db))
+    ? (req: IncomingMessage) => overrideContext(req, createBaseContext(db))
     : userCreateContext
-      ? (req: IncomingMessage) => userCreateContext(req, createContext(db))
+      ? (req: IncomingMessage) => userCreateContext(req, createBaseContext(db))
       : missingCreateContext;
 `
     : `  const overrideContext = options.createContext;
   const resolveContext = overrideContext
-    ? (req: IncomingMessage) => overrideContext(req, createContext(db))
-    : () => createContext(db);
+    ? (req: IncomingMessage) => overrideContext(req, createBaseContext(db))
+    : () => createBaseContext(db);
 `;
   const userServerConfigure = userServer
     ? `  const maybeConfigure = (userServer as { configureServer?: unknown }).configureServer;
@@ -670,7 +670,7 @@ import { pathToFileURL } from "node:url";
 import { Client, Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import schema from "${schemaImport}";
-import { createContext, createDb } from "${runtimeImport}";
+import { createBaseContext, createDb } from "${runtimeImport}";
 import { createNodeServer, createQuerySubscriptionManager } from "${nodeRuntimeImport}";
 ${userServerImport}import { mutations, queries } from "./functions";
 import type { ServerContext } from "./server";

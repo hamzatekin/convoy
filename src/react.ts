@@ -9,6 +9,9 @@ import {
 } from './client';
 import { ConvoyError, type ConvoyErrorPayload } from './errors';
 
+export const skipToken = Symbol('convoy.skip');
+export type SkipToken = typeof skipToken;
+
 export type UseQueryOptions = {
   enabled?: boolean;
   client?: ConvoyClient;
@@ -27,7 +30,7 @@ export type UseQueryResult<TRef> = {
   isStale: boolean;
   isReconnecting: boolean;
   connectionState: QueryConnectionState;
-  refetch: (nextArgs?: ArgsOfRef<TRef> | null) => Promise<ResultOfRef<TRef> | null>;
+  refetch: (nextArgs?: ArgsOfRef<TRef>) => Promise<ResultOfRef<TRef> | null>;
 };
 
 export type UseMutationResult<TRef> = {
@@ -253,7 +256,7 @@ const defaultClient = createConvoyClient();
 
 export function useQuery<TRef extends QueryRef<string, any, any>>(
   ref: TRef,
-  args: ArgsOfRef<TRef> | null | undefined,
+  args: ArgsOfRef<TRef> | SkipToken,
   options?: UseQueryOptions,
 ): UseQueryResult<TRef> {
   const client = options?.client ?? defaultClient;
@@ -278,13 +281,16 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
   }, [args]);
 
   const argsKey = useMemo(() => {
+    if (args === skipToken) {
+      return 'skip';
+    }
     return JSON.stringify(args ?? null);
   }, [args]);
 
   const refetch = useCallback(
-    async (nextArgs?: ArgsOfRef<TRef> | null) => {
+    async (nextArgs?: ArgsOfRef<TRef>) => {
       const resolvedArgs = nextArgs ?? argsRef.current;
-      if (resolvedArgs == null) {
+      if (resolvedArgs == null || resolvedArgs === skipToken) {
         return null;
       }
       const requestId = (requestIdRef.current += 1);
@@ -315,7 +321,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
 
   useEffect(() => {
     const resolvedArgs = argsRef.current;
-    if (!enabled || resolvedArgs == null) {
+    if (!enabled || resolvedArgs === skipToken) {
       lastAutoFetchKeyRef.current = null;
       setIsLoading(false);
       return;
@@ -358,7 +364,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
       setHasEverConnected(false);
       return;
     }
-    if (!enabled || argsRef.current == null) {
+    if (!enabled || argsRef.current === skipToken) {
       setConnectionState('disabled');
       setHasEverConnected(false);
       return;
@@ -374,7 +380,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
         });
         return;
       }
-      if (!enabled || argsRef.current == null) {
+      if (!enabled || argsRef.current === skipToken) {
         return;
       }
       void refetch();
@@ -410,7 +416,7 @@ export function useQuery<TRef extends QueryRef<string, any, any>>(
               const wasOpen = sseWasOpenRef.current;
               sseWasOpenRef.current = true;
               if (sseEverConnectedRef.current && !wasOpen) {
-                if (enabled && argsRef.current != null) {
+                if (enabled && argsRef.current !== skipToken) {
                   void refetch();
                 }
               }
