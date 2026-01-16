@@ -19,11 +19,14 @@
   },
   "files": [
     "bin",
+    "deploy",
     "dist",
     "scripts",
     "README.md",
     "ROADMAP.md",
-    "PILLARS.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "ARCHITECTURE.md",
     "LICENSE"
   ],
   "exports": {

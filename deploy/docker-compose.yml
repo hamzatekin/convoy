@@ -1,0 +1,35 @@
+# Convoy Docker Compose
+# Copy to your project root for local development with Docker
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: convoy
+      POSTGRES_PASSWORD: convoy
+      POSTGRES_DB: convoy
+    volumes:
+      - convoy_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U convoy -d convoy']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://convoy:convoy@db:5432/convoy
+      PORT: 3000
+    ports:
+      - '3000:3000'
+
+volumes:
+  convoy_data:

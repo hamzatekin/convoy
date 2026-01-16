@@ -124,6 +124,16 @@ describe('createDb', () => {
     expect(() => db.query('users').order('asc', 'unknown' as any)).toThrow('Unknown field "unknown"');
   });
 
+  it('supports limit and offset for pagination', async () => {
+    const { runner } = createRunner([{ id: TEST_UUID, data: { name: 'Ada', age: 32 } }]);
+    const db = createDb(runner, schema);
+
+    // Verify chaining works and returns results
+    const rows = await db.query('users').limit(10).offset(20).collect();
+
+    expect(rows).toEqual([{ id: `users:${TEST_UUID}`, name: 'Ada', age: 32 }]);
+  });
+
   it('executes raw queries', async () => {
     const { runner, calls } = createRunner({ rows: [{ total: 2 }] });
     const db = createDb(runner, schema);
@@ -132,5 +142,110 @@ describe('createDb', () => {
 
     expect(rows).toEqual([{ total: 2 }]);
     expect(calls).toHaveLength(1);
+  });
+
+  it('deletes rows by table and id', async () => {
+    const { runner } = createRunner({ rows: [{ id: TEST_UUID }] });
+    const db = createDb(runner, schema);
+
+    const result = await db.delete('users', encodeId('users', TEST_UUID));
+
+    expect(result).toBe(true);
+  });
+
+  it('deletes rows by id only', async () => {
+    const { runner } = createRunner({ rows: [{ id: TEST_UUID }] });
+    const db = createDb(runner, schema);
+
+    const result = await db.delete(encodeId('users', TEST_UUID));
+
+    expect(result).toBe(true);
+  });
+
+  it('returns false when deleting non-existent row', async () => {
+    const { runner } = createRunner({ rows: [] });
+    const db = createDb(runner, schema);
+
+    const result = await db.delete('users', encodeId('users', TEST_UUID));
+
+    expect(result).toBe(false);
+  });
+
+  it('executes operations in a transaction', async () => {
+    const txCalls: unknown[] = [];
+    const txRunner = {
+      execute: async (query: unknown) => {
+        txCalls.push(query);
+        return { rows: [{ id: TEST_UUID, data: { name: 'Ada', age: 32 } }] };
+      },
+    };
+    const runner = {
+      execute: async () => ({ rows: [] }),
+      transaction: async <T>(fn: (tx: typeof txRunner) => Promise<T>) => fn(txRunner),
+    };
+    const db = createDb(runner, schema);
+
+    const result = await db.transaction(async (tx) => {
+      const user = await tx.get('users', encodeId('users', TEST_UUID));
+      return user;
+    });
+
+    expect(result).toEqual({ id: `users:${TEST_UUID}`, name: 'Ada', age: 32 });
+    expect(txCalls).toHaveLength(1);
+  });
+
+  it('throws when transaction is not supported', async () => {
+    const { runner } = createRunner({ rows: [] });
+    const db = createDb(runner, schema);
+
+    await expect(db.transaction(async () => undefined)).rejects.toThrow(
+      'Transaction not supported by this database runner',
+    );
+  });
+
+  it('inserts multiple rows with insertMany', async () => {
+    const { runner } = createRunner({
+      rows: [{ id: TEST_UUID }, { id: TEST_UUID }],
+    });
+    const db = createDb(runner, schema);
+
+    const ids = await db.insertMany('users', [
+      { name: 'Ada', age: 32 },
+      { name: 'Bob', age: 25 },
+    ]);
+
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toBe(`users:${TEST_UUID}`);
+  });
+
+  it('returns empty array for empty insertMany', async () => {
+    const { runner, calls } = createRunner({ rows: [] });
+    const db = createDb(runner, schema);
+
+    const ids = await db.insertMany('users', []);
+
+    expect(ids).toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('deletes multiple rows with deleteMany', async () => {
+    const { runner } = createRunner({
+      rows: [{ id: TEST_UUID }, { id: TEST_UUID }],
+    });
+    const db = createDb(runner, schema);
+
+    const count = await db.deleteMany('users', [encodeId('users', TEST_UUID), encodeId('users', TEST_UUID)]);
+
+    expect(count).toBe(2);
+  });
+
+  it('returns 0 for empty deleteMany', async () => {
+    const { runner, calls } = createRunner({ rows: [] });
+    const db = createDb(runner, schema);
+
+    const count = await db.deleteMany('users', []);
+
+    expect(count).toBe(0);
+    expect(calls).toHaveLength(0);
   });
 });

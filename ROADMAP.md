@@ -1,111 +1,86 @@
 # Convoy Roadmap
 
-This roadmap shows where Convoy is today and what lies ahead.  
-The goal of **v1** is not more features, but **stability, trust, and production readiness**.
+This roadmap shows where Convoy is today and what's next.
 
 ---
 
-## ✅ MVP (DONE)
+## ✅ Completed (v0.0.x — MVP)
 
-> Proof that the core idea works and the DX is real.
+The foundation is built and working:
 
-- [x] Postgres-backed **JSONB document model**
-- [x] **Schema-first** design using Zod (runtime validation + type inference)
-- [x] **Queries & mutations** as server functions (no user-defined routes)
-- [x] CLI that:
-  - watches schema & functions
-  - syncs DB tables and indexes (create-if-missing)
-  - generates typed client APIs
-  - starts the runtime server
-- [x] **End-to-end type safety** (schema → server → client hooks)
-- [x] HTTP gateway as a transport detail
-- [x] **Reactive queries**
-  - SSE subscriptions
-  - server-pushed authoritative updates
-- [x] Postgres **LISTEN / NOTIFY**–based invalidation
-- [x] Automatic UI updates without manual refetch
-- [x] Fully **self-hosted** (users own their Postgres)
+- [x] Postgres-backed JSONB document model
+- [x] Schema-first design with Zod (runtime validation + type inference)
+- [x] Queries & mutations as server functions
+- [x] CLI: watch → sync → generate → serve
+- [x] End-to-end type safety (schema → server → client hooks)
+- [x] Reactive queries via SSE with server-pushed updates
+- [x] Postgres LISTEN/NOTIFY invalidation
+- [x] Stable SSE reconnect with full re-sync
+- [x] Structured error codes and typed responses
+- [x] Auth via `createContext(req, base)` pattern
+- [x] Raw SQL escape hatch (`ctx.db.raw()`)
+- [x] Unmanaged tables (`.unmanaged()`)
+- [x] Clear dev vs deploy workflows (`convoy dev` / `convoy migrate`)
 
 ---
 
-## 🎯 v1 (NEXT)
+## 🎯 v1.0 (Next)
 
-> Make Convoy something you can confidently run in production.
+> Make Convoy production-ready.
 
-### Runtime & Sync Hardening
+### Critical Gaps
 
-- [x] Stable SSE reconnect behavior
-- [x] Full re-sync on reconnect or missed events
-- [x] Limits & safeguards:
-  - [x] max concurrent subscriptions
-  - [x] payload size limits
-- [x] Deterministic query execution guarantees
-- [x] Clear mutation boundaries (no partial state leaks)
+- [x] **`db.delete()`** — Complete CRUD operations ✅
+- [x] **Transaction support** — `ctx.db.transaction()` for atomic mutations ✅
+- [x] **One-click deploy** — Dockerfile + docker-compose.yml + Railway template ✅
+- [ ] **`create-convoy-app` CLI** — `npx create-convoy-app my-app` for instant setup
 
-### Error Handling & DX Polish
+### Developer Experience
 
-- [x] Structured error codes (`UNAUTHORIZED`, `INVALID_ARGS`, etc.)
-- [x] Typed error responses (not just strings)
-- [x] Better client-side error states in hooks
-- [x] Clear loading / stale / reconnect states
+- [x] CLI progress indicators during generation ✅
+- [x] Better error messages for schema sync failures ✅
+- [ ] Hot reload improvements (faster watch cycles)
 
-### Auth as First-Class Context (Not a Service)
+### Documentation
 
-- [x] Official `createContext(req, base)` pattern
-- [x] Auth resolved once per request
-- [x] Example integrations:
-  - [x] JWT
-  - [x] Cookie-based sessions
-- [x] Documentation for auth best practices
-- [x] No auth lock-in or hosted auth dependency
-
-### Schema & Deployment Workflow
-
-- [x] Clear separation between:
-  - `convoy dev` (auto-sync, fast iteration)
-  - `convoy deploy` / `convoy migrate` (explicit, safe)
-- [x] Warnings for destructive or incompatible schema changes
-- [x] Non-destructive defaults
-- [x] Clear production deployment guidance
-
-### Escape Hatches (Trust Builders)
-
-- [x] Raw SQL escape hatch (`ctx.db.raw(...)`)
-- [x] Ability to opt out of Convoy for specific tables
-- [x] Clear guidance on mixing Convoy with traditional backends
-- [x] Documented “how to eject” story
-
-### Documentation & Positioning
-
-- [x] Clear mental model documentation
-- [x] Data flow diagrams (simple, high-level)
-- [x] “What Convoy is / is not”
-- [x] Comparison with REST and Convex
-- [x] Explicit tradeoffs and limitations
+- [x] Production deployment guide ✅ (see `deploy/DEPLOY.md`)
+- [x] Auth integration examples ✅ (see `docs/AUTH.md`)
+- [x] Migration from Convex guide ✅ (see `docs/MIGRATION_FROM_CONVEX.md`)
 
 ---
 
-## 🚀 Post-v1 (FUTURE)
+## 🚀 v1.x (Soon)
 
-> Power features that build on a stable core.
+> Expand compatibility and reduce friction.
 
-- [ ] WebSocket transport (alternative to SSE)
-- [ ] Mobile-friendly subscription transport
-- [ ] Optional advanced client adapters (e.g. TanStack Query)
-- [ ] Guided JSONB → relational “graduation” tooling
-- [ ] Schema drift analysis & reporting
-- [ ] Observability hooks (logging, metrics)
+- [ ] **Pluggable database drivers** — Support `postgres` (postgresjs), `@neondatabase/serverless`
+- [ ] **Auth adapters package** — `@avvos/convoy-auth` with common providers
+- [x] **Batch operations** — `db.insertMany()`, `db.deleteMany()` ✅
+- [x] **Query pagination** — `.limit()`, `.offset()`, cursor-based pagination ✅
+- [ ] **Observability hooks** — Logging, metrics, tracing integration points
+- [ ] **Generated OpenAPI spec** — For teams that need REST documentation
+
+---
+
+## 💭 Future (Considering)
+
+> Nice-to-haves based on community feedback.
+
+- [ ] WebSocket transport (alternative to SSE for specific use cases)
+- [ ] Optimistic update helpers in React hooks
+- [ ] TanStack Query adapter
+- [ ] JSONB → relational migration tooling
+- [ ] Schema drift detection and warnings
+- [ ] Multi-database support (read replicas)
 - [ ] Optional managed hosting (Convoy Cloud)
-- [ ] Team / multi-project tooling
 
 ---
 
-## v1 Definition of Done
+## Definition of Done (v1.0)
 
-Convoy can be considered **v1** when:
+Convoy is **v1.0** when:
 
-- It is stable under real production load
-- Reactive queries are reliable and predictable
-- Auth and errors are well-defined and boring
-- Schema and deployment workflows are explicit
-- Users feel confident they can escape or extend when needed
+- Full CRUD: insert, get, patch, delete, query
+- Transactions work reliably
+- A new user can go from `npx create-convoy-app` to deployed in under 10 minutes
+- At least one production app is running on it (yours counts!)

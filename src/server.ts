@@ -91,6 +91,7 @@ export function createFunctionHelpers<TCtx>() {
 
 type SqlRunner = {
   execute: (query: SQL) => Promise<{ rows: unknown[] } | unknown[]>;
+  transaction?: <T>(fn: (tx: SqlRunner) => Promise<T>) => Promise<T>;
 };
 
 type RowFor<TTables extends SchemaTables, TTableName extends keyof TTables> = z.output<
@@ -134,6 +135,8 @@ type QueryBuilder<TTables extends SchemaTables, TTableName extends keyof TTables
     direction: 'asc' | 'desc',
     field?: TableFieldsFor<TTables, TTableName> | 'id',
   ) => QueryBuilder<TTables, TTableName>;
+  limit: (count: number) => QueryBuilder<TTables, TTableName>;
+  offset: (count: number) => QueryBuilder<TTables, TTableName>;
   collect: () => Promise<Array<RowFor<TTables, TTableName>>>;
   first: () => Promise<RowFor<TTables, TTableName> | null>;
 };
@@ -199,6 +202,13 @@ function buildLimit(limit: number | null): SQL {
   return sql`LIMIT ${limit}`;
 }
 
+function buildOffset(offset: number | null): SQL {
+  if (!offset) {
+    return sql``;
+  }
+  return sql`OFFSET ${offset}`;
+}
+
 export function createDb<TTables extends SchemaTables>(
   runner: SqlRunner,
   schema: TTables,
@@ -227,8 +237,62 @@ export function createDb<TTables extends SchemaTables>(
       data: Partial<z.input<TTables[TableNameFromId<TTables, TId>]['schema']>>,
     ): Promise<RowFor<TTables, TableNameFromId<TTables, TId>> | null>;
   };
+  delete: {
+    <TTableName extends keyof TTables>(table: TTableName, id: Id<Extract<TTableName, string>>): Promise<boolean>;
+    <TId extends Id<Extract<keyof TTables, string>>>(id: TId): Promise<boolean>;
+  };
+  insertMany: <TTableName extends keyof TTables>(
+    table: TTableName,
+    data: Array<z.input<TTables[TTableName]['schema']>>,
+  ) => Promise<Array<Id<Extract<TTableName, string>>>>;
+  deleteMany: <TTableName extends keyof TTables>(
+    table: TTableName,
+    ids: Array<Id<Extract<TTableName, string>>>,
+  ) => Promise<number>;
   query: <TTableName extends keyof TTables>(table: TTableName) => QueryBuilder<TTables, TTableName>;
   raw: <TRow extends Record<string, unknown> = Record<string, unknown>>(query: SQL) => Promise<TRow[]>;
+  transaction: <TResult>(
+    fn: (tx: {
+      insert: <TTableName extends keyof TTables>(
+        table: TTableName,
+        data: z.input<TTables[TTableName]['schema']>,
+      ) => Promise<Id<Extract<TTableName, string>>>;
+      get: {
+        <TTableName extends keyof TTables>(
+          table: TTableName,
+          id: Id<Extract<TTableName, string>>,
+        ): Promise<RowFor<TTables, TTableName> | null>;
+        <TId extends Id<Extract<keyof TTables, string>>>(
+          id: TId,
+        ): Promise<RowFor<TTables, TableNameFromId<TTables, TId>> | null>;
+      };
+      patch: {
+        <TTableName extends keyof TTables>(
+          table: TTableName,
+          id: Id<Extract<TTableName, string>>,
+          data: Partial<z.input<TTables[TTableName]['schema']>>,
+        ): Promise<RowFor<TTables, TTableName> | null>;
+        <TId extends Id<Extract<keyof TTables, string>>>(
+          id: TId,
+          data: Partial<z.input<TTables[TableNameFromId<TTables, TId>]['schema']>>,
+        ): Promise<RowFor<TTables, TableNameFromId<TTables, TId>> | null>;
+      };
+      delete: {
+        <TTableName extends keyof TTables>(table: TTableName, id: Id<Extract<TTableName, string>>): Promise<boolean>;
+        <TId extends Id<Extract<keyof TTables, string>>>(id: TId): Promise<boolean>;
+      };
+      insertMany: <TTableName extends keyof TTables>(
+        table: TTableName,
+        data: Array<z.input<TTables[TTableName]['schema']>>,
+      ) => Promise<Array<Id<Extract<TTableName, string>>>>;
+      deleteMany: <TTableName extends keyof TTables>(
+        table: TTableName,
+        ids: Array<Id<Extract<TTableName, string>>>,
+      ) => Promise<number>;
+      query: <TTableName extends keyof TTables>(table: TTableName) => QueryBuilder<TTables, TTableName>;
+      raw: <TRow extends Record<string, unknown> = Record<string, unknown>>(query: SQL) => Promise<TRow[]>;
+    }) => Promise<TResult>,
+  ) => Promise<TResult>;
 } {
   function tableDefinitionByKey(tableKey: string) {
     const table = schema[tableKey as keyof TTables];
@@ -386,13 +450,76 @@ export function createDb<TTables extends SchemaTables>(
     };
   }
 
+  async function del<TTableName extends keyof TTables>(
+    table: TTableName,
+    id: Id<Extract<TTableName, string>>,
+  ): Promise<boolean>;
+  async function del<TId extends Id<Extract<keyof TTables, string>>>(id: TId): Promise<boolean>;
+  async function del(
+    tableOrId: keyof TTables | Id<Extract<keyof TTables, string>>,
+    maybeId?: Id<Extract<keyof TTables, string>>,
+  ): Promise<boolean> {
+    const resolved =
+      maybeId === undefined
+        ? resolveTableFromId(tableOrId)
+        : {
+            ...tableInfo(tableOrId as keyof TTables),
+            uuid: resolveUuidForTable(String(tableOrId), maybeId),
+          };
+    const rows = await run<{ id: string }>(sql`
+      DELETE FROM ${sql.identifier(resolved.tableName)}
+      WHERE id = ${resolved.uuid}
+      RETURNING id
+    `);
+    return rows.length > 0;
+  }
+
+  async function insertMany<TTableName extends keyof TTables>(
+    table: TTableName,
+    data: Array<z.input<TTables[TTableName]['schema']>>,
+  ): Promise<Array<Id<Extract<TTableName, string>>>> {
+    if (data.length === 0) {
+      return [];
+    }
+    const { tableKey, tableName, definition } = tableInfo(table);
+    // Validate all items first
+    const parsed = data.map((item) => definition.schema.parse(item));
+    // Build VALUES clause with multiple rows
+    const valuesClauses = parsed.map((item) => sql`(${item}::jsonb)`);
+    const rows = await run<{ id: string }>(sql`
+      INSERT INTO ${sql.identifier(tableName)} (data)
+      VALUES ${sql.join(valuesClauses, sql`, `)}
+      RETURNING id
+    `);
+    return rows.map((row) => encodeId(tableKey, row.id) as Id<Extract<TTableName, string>>);
+  }
+
+  async function deleteMany<TTableName extends keyof TTables>(
+    table: TTableName,
+    ids: Array<Id<Extract<TTableName, string>>>,
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const { tableKey, tableName } = tableInfo(table);
+    // Resolve all IDs to UUIDs
+    const uuids = ids.map((id) => resolveUuidForTable(tableKey, id));
+    const rows = await run<{ id: string }>(sql`
+      DELETE FROM ${sql.identifier(tableName)}
+      WHERE id = ANY(${uuids}::uuid[])
+      RETURNING id
+    `);
+    return rows.length;
+  }
+
   function queryTable<TTableName extends keyof TTables>(table: TTableName): QueryBuilder<TTables, TTableName> {
     const { tableKey, tableName, definition } = tableInfo(table);
     const shape = definition.schema.shape;
     const defaultOrderField = shape && typeof shape === 'object' && 'createdAt' in shape ? 'createdAt' : 'id';
     const filters: QueryFilter[] = [];
     let order: QueryOrder | null = null;
-    let limit: number | null = null;
+    let limitCount: number | null = null;
+    let offsetCount: number | null = null;
     const indexes = definition.indexes ?? {};
 
     const builder: QueryBuilder<TTables, TTableName> = {
@@ -422,6 +549,14 @@ export function createDb<TTables extends SchemaTables>(
         order = { direction, field: nextField };
         return builder;
       },
+      limit: (count) => {
+        limitCount = count;
+        return builder;
+      },
+      offset: (count) => {
+        offsetCount = count;
+        return builder;
+      },
       collect: async () => {
         const rows = await run<{
           id: string;
@@ -431,7 +566,8 @@ export function createDb<TTables extends SchemaTables>(
           FROM ${sql.identifier(tableName)}
           ${buildWhere(tableKey, filters)}
           ${buildOrder(order)}
-          ${buildLimit(limit)}
+          ${buildLimit(limitCount)}
+          ${buildOffset(offsetCount)}
         `);
         return rows.map((row) => {
           return {
@@ -441,7 +577,7 @@ export function createDb<TTables extends SchemaTables>(
         });
       },
       first: async () => {
-        limit = 1;
+        limitCount = 1;
         const rows = await builder.collect();
         return rows[0] ?? null;
       },
@@ -450,12 +586,28 @@ export function createDb<TTables extends SchemaTables>(
     return builder;
   }
 
+  async function transaction<TResult>(
+    fn: (tx: ReturnType<typeof createDb<TTables>>) => Promise<TResult>,
+  ): Promise<TResult> {
+    if (!runner.transaction) {
+      throw new Error('Transaction not supported by this database runner');
+    }
+    return runner.transaction(async (txRunner) => {
+      const txDb = createDb(txRunner, schema);
+      return fn(txDb);
+    });
+  }
+
   return {
     insert,
     get,
     patch,
+    delete: del,
+    insertMany,
+    deleteMany,
     query: queryTable,
     raw,
+    transaction,
   };
 }
 

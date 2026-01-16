@@ -68,6 +68,129 @@ type SyncSettings = {
   modeLabel: string;
 };
 
+// Simple CLI spinner utility (no dependencies)
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const isCI = Boolean(process.env.CI);
+const isTTY = process.stdout.isTTY && !isCI;
+
+type Spinner = {
+  update: (text: string) => void;
+  succeed: (text: string) => void;
+  fail: (text: string) => void;
+  stop: () => void;
+};
+
+function createSpinner(initialText: string): Spinner {
+  let frameIndex = 0;
+  let currentText = initialText;
+  let intervalId: ReturnType<typeof setInterval> | null = null;
+
+  const render = () => {
+    if (!isTTY) return;
+    const frame = SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length];
+    process.stdout.write(`\r\x1b[K${frame} ${currentText}`);
+    frameIndex++;
+  };
+
+  const clear = () => {
+    if (!isTTY) return;
+    process.stdout.write('\r\x1b[K');
+  };
+
+  if (isTTY) {
+    render();
+    intervalId = setInterval(render, 80);
+  } else {
+    console.log(`  ${initialText}...`);
+  }
+
+  return {
+    update: (text: string) => {
+      currentText = text;
+    },
+    succeed: (text: string) => {
+      if (intervalId) clearInterval(intervalId);
+      clear();
+      console.log(`\x1b[32m✓\x1b[0m ${text}`);
+    },
+    fail: (text: string) => {
+      if (intervalId) clearInterval(intervalId);
+      clear();
+      console.log(`\x1b[31m✗\x1b[0m ${text}`);
+    },
+    stop: () => {
+      if (intervalId) clearInterval(intervalId);
+      clear();
+    },
+  };
+}
+
+// Improved error formatting with hints
+class ConvoyError extends Error {
+  constructor(
+    message: string,
+    public hint?: string,
+  ) {
+    super(message);
+    this.name = 'ConvoyError';
+  }
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof ConvoyError) {
+    let msg = `\x1b[31mError:\x1b[0m ${error.message}`;
+    if (error.hint) {
+      msg += `\n\x1b[33mHint:\x1b[0m ${error.hint}`;
+    }
+    return msg;
+  }
+  if (error instanceof Error) {
+    return `\x1b[31mError:\x1b[0m ${error.message}`;
+  }
+  return `\x1b[31mError:\x1b[0m ${String(error)}`;
+}
+
+function formatDbConnectionError(error: unknown, databaseUrl: string): ConvoyError {
+  const message = error instanceof Error ? error.message : String(error);
+
+  // Parse connection details for helpful hints
+  let hint = '';
+  try {
+    const url = new URL(databaseUrl);
+    const host = url.hostname;
+    const port = url.port || '5432';
+
+    if (message.includes('ECONNREFUSED')) {
+      hint =
+        `Cannot connect to PostgreSQL at ${host}:${port}.\n` +
+        `  • Is PostgreSQL running? Try: docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres\n` +
+        `  • Check your DATABASE_URL in .env`;
+    } else if (message.includes('password authentication failed')) {
+      hint =
+        `Invalid credentials for PostgreSQL.\n` +
+        `  • Check your username and password in DATABASE_URL\n` +
+        `  • Format: postgres://user:password@host:port/database`;
+    } else if (message.includes('does not exist')) {
+      hint =
+        `Database not found. Use 'convoy dev' to auto-create it, or create manually:\n` +
+        `  createdb ${url.pathname.replace('/', '')}`;
+    } else if (message.includes('ETIMEDOUT') || message.includes('timeout')) {
+      hint =
+        `Connection timed out to ${host}:${port}.\n` +
+        `  • Check if the host is reachable\n` +
+        `  • Verify firewall/security group settings`;
+    }
+  } catch {
+    // URL parsing failed, use generic hint
+  }
+
+  if (!hint) {
+    hint = 'Check your DATABASE_URL and ensure PostgreSQL is running.';
+  }
+
+  return new ConvoyError(`Database connection failed: ${message}`, hint);
+}
+
 export function parseArgs(argv: string[]): CliOptions {
   const args = [...argv];
   let command: CliOptions['command'] = 'dev';
@@ -892,15 +1015,50 @@ async function loadSchemaModule(schemaPath: string, cacheBust = false): Promise<
     const schemaModule = await import(importUrl);
     const schema = schemaModule.default ?? schemaModule.schema;
     if (!schema || typeof schema !== 'object') {
-      throw new Error('schema.ts must export a schema object (default or named)');
+      throw new ConvoyError(
+        'Schema file must export a schema object',
+        `Add one of these to your schema.ts:\n` +
+          `  export default defineSchema({ ... })\n` +
+          `  export const schema = defineSchema({ ... })`,
+      );
     }
     return schema as Record<string, any>;
   } catch (error) {
+    // Already a ConvoyError, rethrow as-is
+    if (error instanceof ConvoyError) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
     const isBun = Boolean(process.versions?.bun);
     const isTypeScript = schemaPath.endsWith('.ts');
-    if (!isBun && isTypeScript) {
-      throw new Error('schema.ts is TypeScript. Run this with bun or with Node using a TS loader (tsx/ts-node).');
+
+    // TypeScript loader issue
+    if (!isBun && isTypeScript && (message.includes('Cannot use import') || message.includes('SyntaxError'))) {
+      throw new ConvoyError(
+        'Cannot load TypeScript schema',
+        `Node.js needs a TypeScript loader. Try one of:\n` +
+          `  • bun convoy dev (recommended)\n` +
+          `  • npx tsx convoy dev\n` +
+          `  • node --import tsx convoy dev`,
+      );
     }
+
+    // Syntax error in schema
+    if (message.includes('SyntaxError') || message.includes('Unexpected token')) {
+      throw new ConvoyError(
+        `Syntax error in schema: ${message}`,
+        `Check your schema.ts for typos or missing brackets.`,
+      );
+    }
+
+    // Module not found (missing import)
+    if (message.includes('Cannot find module') || message.includes('Module not found')) {
+      const match = message.match(/Cannot find (?:module|package) ['"](.*?)['"]/);
+      const moduleName = match?.[1] || 'unknown';
+      throw new ConvoyError(`Missing dependency: ${moduleName}`, `Install it with: npm install ${moduleName}`);
+    }
+
     throw error;
   }
 }
@@ -936,26 +1094,50 @@ async function loadEnvFiles(rootDir: string): Promise<void> {
 }
 
 async function ensureDatabase(databaseUrl: string, options: { createIfMissing: boolean }): Promise<void> {
-  const targetUrl = new URL(databaseUrl);
+  let targetUrl: URL;
+  try {
+    targetUrl = new URL(databaseUrl);
+  } catch {
+    throw new ConvoyError(
+      'Invalid DATABASE_URL format',
+      `Expected: postgres://user:password@host:port/database\n` +
+        `Current value starts with: ${databaseUrl.slice(0, 20)}...`,
+    );
+  }
+
   const dbName = decodeURIComponent(targetUrl.pathname.replace(/^\//, ''));
   if (!dbName) {
-    throw new Error('DATABASE_URL must include a database name');
+    throw new ConvoyError(
+      'DATABASE_URL must include a database name',
+      `Add a database name to your URL:\n` + `  ${databaseUrl}/mydb`,
+    );
   }
 
   const adminUrl = new URL(databaseUrl);
   adminUrl.pathname = '/postgres';
 
   const adminClient = new Client({ connectionString: adminUrl.toString() });
-  await adminClient.connect();
-  const exists = await adminClient.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName]);
-  if (exists.rowCount === 0) {
-    if (!options.createIfMissing) {
-      await adminClient.end();
-      throw new Error(`Database "${dbName}" does not exist. Create it before running convoy migrate.`);
-    }
-    await adminClient.query(`CREATE DATABASE ${quoteIdent(dbName)}`);
+  try {
+    await adminClient.connect();
+  } catch (error) {
+    throw formatDbConnectionError(error, databaseUrl);
   }
-  await adminClient.end();
+
+  try {
+    const exists = await adminClient.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName]);
+    if (exists.rowCount === 0) {
+      if (!options.createIfMissing) {
+        await adminClient.end();
+        throw new ConvoyError(
+          `Database "${dbName}" does not exist`,
+          `Use 'convoy dev' to auto-create it, or create manually:\n` + `  createdb ${dbName}`,
+        );
+      }
+      await adminClient.query(`CREATE DATABASE ${quoteIdent(dbName)}`);
+    }
+  } finally {
+    await adminClient.end();
+  }
 }
 
 async function ensureTables(databaseUrl: string, schema: Record<string, any>): Promise<string[]> {
@@ -1013,7 +1195,7 @@ async function syncOnce(options: CliOptions, settings: SyncSettings, cacheBust =
   const schemaExists = await pathExists(schemaPath);
   if (!schemaExists) {
     await writeFile(schemaPath, SCHEMA_TEMPLATE, 'utf8');
-    console.log(`Created ${schemaPath}`);
+    console.log(`\x1b[32m✓\x1b[0m Created ${schemaPath}`);
   }
 
   await loadEnvFiles(rootDir);
@@ -1022,29 +1204,59 @@ async function syncOnce(options: CliOptions, settings: SyncSettings, cacheBust =
     throw new Error('DATABASE_URL is missing. Add it to your environment or .env file.');
   }
 
-  const schema = await loadSchemaModule(schemaPath, cacheBust);
+  // Load and validate schema
+  const schemaSpinner = createSpinner('Loading schema');
+  let schema: Record<string, any>;
+  try {
+    schema = await loadSchemaModule(schemaPath, cacheBust);
+    schemaSpinner.succeed('Schema loaded');
+  } catch (error) {
+    schemaSpinner.fail('Failed to load schema');
+    throw error;
+  }
+
   const snapshotPath = path.join(generatedDir, SCHEMA_SNAPSHOT_FILENAME);
   const previousSnapshot = await readSchemaSnapshot(snapshotPath);
   const nextSnapshot = buildSchemaSnapshot(schema);
   const warnings = diffSchemaSnapshots(previousSnapshot, nextSnapshot);
   if (settings.warnOnSchemaChanges && warnings.length > 0) {
-    console.warn(`Schema warnings (${settings.modeLabel}):`);
+    console.warn(`\x1b[33m⚠\x1b[0m Schema warnings (${settings.modeLabel}):`);
     for (const warning of warnings) {
-      console.warn(`- ${warning}`);
+      console.warn(`  - ${warning}`);
     }
-    console.warn('Convoy never drops tables or indexes automatically.');
+    console.warn('  Convoy never drops tables or indexes automatically.');
   }
 
-  await ensureDatabase(databaseUrl, { createIfMissing: settings.allowCreateDatabase });
-  const tables = await ensureTables(databaseUrl, schema);
-  console.log(`Synced ${tables.length} table(s): ${tables.join(', ')}`);
-  await generateServer(rootDir, schemaPath);
-  await generateServerTypes(rootDir, schemaPath);
-  await generateApi(rootDir, { cacheBust });
-  await generateHttpServer(rootDir, schemaPath);
-  await generateDataModelTypes(rootDir, schemaPath);
-  await writeSchemaSnapshot(snapshotPath, nextSnapshot);
-  console.log('Generated Convoy bindings');
+  // Sync database
+  const dbSpinner = createSpinner('Syncing database');
+  let tables: string[];
+  try {
+    await ensureDatabase(databaseUrl, { createIfMissing: settings.allowCreateDatabase });
+    tables = await ensureTables(databaseUrl, schema);
+    dbSpinner.succeed(`Database synced (${tables.length} table${tables.length === 1 ? '' : 's'})`);
+  } catch (error) {
+    dbSpinner.fail('Failed to sync database');
+    throw error;
+  }
+
+  // Generate bindings
+  const genSpinner = createSpinner('Generating bindings');
+  try {
+    await generateServer(rootDir, schemaPath);
+    genSpinner.update('Generating server types');
+    await generateServerTypes(rootDir, schemaPath);
+    genSpinner.update('Generating API');
+    await generateApi(rootDir, { cacheBust });
+    genSpinner.update('Generating HTTP server');
+    await generateHttpServer(rootDir, schemaPath);
+    genSpinner.update('Generating data model types');
+    await generateDataModelTypes(rootDir, schemaPath);
+    await writeSchemaSnapshot(snapshotPath, nextSnapshot);
+    genSpinner.succeed('Bindings generated');
+  } catch (error) {
+    genSpinner.fail('Failed to generate bindings');
+    throw error;
+  }
 }
 
 async function startDevServer(rootDir: string): Promise<ChildProcess | null> {
@@ -1274,7 +1486,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
 const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   runCli().catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(formatError(error));
     process.exitCode = 1;
   });
 }

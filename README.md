@@ -1,107 +1,52 @@
 # Convoy
 
-**Convex-style reactive backend DX — on your own Postgres.**
+**Move fast with schemaless. Graduate to relational when you're ready. Never leave Postgres.**
 
-Convoy is a self-hosted backend runtime where you build your backend by writing **queries and mutations**, and your UI stays in sync automatically via **server-pushed updates**.
+Convoy is a self-hosted backend runtime for indie hackers and small teams who want to validate ideas fast—without painting themselves into a corner.
 
-You keep full ownership of your database. Convoy handles execution, typing, and reactivity.
+Start with **JSONB documents** for rapid iteration. Get **typed React hooks** and **reactive queries** out of the box. When you find product-market fit and need migrations, foreign keys, and data integrity—you're already on Postgres. Just graduate your schema.
 
-Start fast with **JSONB document tables**, iterate quickly, and keep a clear path toward stricter schemas and relational data as your product matures.
-
-**Status:** `0.0.x` — MVP (core ideas implemented, APIs still stabilizing)
-
----
-
-## Why Convoy
-
-- **Postgres as the source of truth** (self-hosted, future-proof)
-- **JSONB-first schema** for fast iteration
-- **End-to-end TypeScript types** (schema → server → client)
-- **Reactive queries** with server-pushed updates
-- No manual cache invalidation or refetch logic
-- Clear path to stronger schemas as your product grows
-
-## Installation
+**No database migration. No vendor lock-in. Lock-out from day 1.**
 
 ```bash
 npm install @avvos/convoy zod
 ```
 
-Requires Node `>=18.19` (or Bun) for the CLI.
+**Status:** `0.0.x` — MVP (core ideas working, APIs stabilizing)
 
 ---
 
-## Core Concepts
+## The Problem
 
-### Schema
+You're building something new. You don't know your schema yet. You need to move fast.
 
-Define your data shape once using Zod. Convoy stores rows as JSONB documents in Postgres and ensures tables and indexes exist during development.
+**Option A: Firebase/MongoDB**
 
-### Queries
+- ✅ Fast to start, no schema decisions
+- ❌ When you need relational? Painful migration to Postgres
 
-Queries are pure read functions. Clients subscribe to queries and receive live updates automatically.
+**Option B: Supabase/Drizzle**
 
-### Mutations
+- ✅ Proper relational from day 1
+- ❌ Slow to start, migrations before you even have users
 
-Mutations are write + business logic functions. When a mutation runs, Convoy invalidates affected queries and pushes updated results to subscribed clients.
+**Option C: Convex**
 
-### Reactivity
+- ✅ Amazing DX, reactive queries
+- ❌ Proprietary storage, "open source" that's not really self-hostable
 
-Convoy uses Postgres `LISTEN / NOTIFY` for change signals and Server-Sent Events (SSE) to stream authoritative query results to clients.
+**Convoy:**
 
-## Mental model
+- ✅ Schemaless speed (JSONB documents)
+- ✅ Already on Postgres (no migration later)
+- ✅ Graduate to relational when ready
+- ✅ Actually self-hostable
 
-- Define tables + indexes once in `convoy/schema.ts`.
-- Write pure `query` functions and side-effecting `mutation` functions.
-- The server validates inputs, injects context (db + auth), and executes functions.
-- Clients call generated refs; `useQuery` stays subscribed and gets server-pushed updates.
+---
 
-## Data flow (simplified)
+## How It Works
 
-```
-Client useQuery  ->  /api/query/:name  ->  run query  ->  SSE stream
-Client mutation  ->  /api/mutation/:name  ->  write DB  ->  NOTIFY -> refresh SSE
-```
-
-## What Convoy is / is not
-
-Convoy is:
-
-- A typed function runtime (query/mutation) on top of your Postgres.
-- A reactive layer that keeps clients in sync via SSE.
-- A schema-first JSONB model optimized for iteration.
-
-Convoy is not:
-
-- A hosted backend or auth provider.
-- A replacement for all of your backend code (you can mix it).
-- A migration engine that drops/renames tables for you.
-
-## Comparison (short)
-
-vs REST:
-
-- Convoy gives end-to-end types and reactive subscriptions; REST gives full manual control.
-- Convoy hides routing; REST exposes explicit endpoints and verbs.
-
-vs Convex:
-
-- Convoy runs on your Postgres; Convex runs on hosted infra.
-- Convoy uses JSONB + SQL; Convex uses its own storage/engine.
-- Convoy is bring-your-own-auth; Convex provides hosted auth integrations.
-
-## Tradeoffs & limitations
-
-- SSE only (no WebSocket transport yet).
-- JSONB-first model
-- No destructive migrations (tables/indexes are created only).
-- Long-lived server process required (not serverless-friendly out of the box).
-
-## Quickstart
-
-### 1) Define your schema
-
-Create `convoy/schema.ts` in your project root:
+### 1. Define your schema with Zod
 
 ```ts
 // convoy/schema.ts
@@ -111,24 +56,26 @@ import { z } from 'zod';
 export const schema = defineSchema({
   users: defineTable({
     name: z.string(),
+    email: z.string(),
     createdAt: z.number(),
   }),
   projects: defineTable({
     name: z.string(),
     userId: defineRef('users'),
+    status: z.enum(['draft', 'active', 'archived']),
     createdAt: z.number(),
   }).index('by_userId', ['userId']),
 });
 ```
 
-### 2) Write queries + mutations
+This creates JSONB tables in Postgres. Fast to change, no migrations needed during development.
 
-Create files under `convoy/functions`:
+### 2. Write queries and mutations
 
 ```ts
 // convoy/functions/projects.ts
-import { defineRef } from '@avvos/convoy';
 import { mutation, query } from '../_generated/server';
+import { defineRef } from '@avvos/convoy';
 import { z } from 'zod';
 
 export const createProject = mutation({
@@ -137,6 +84,7 @@ export const createProject = mutation({
     return ctx.db.insert('projects', {
       userId: input.userId,
       name: input.name,
+      status: 'draft',
       createdAt: Date.now(),
     });
   },
@@ -154,221 +102,268 @@ export const listProjects = query({
 });
 ```
 
-### 3) Sync and generate API bindings
-
-Run the dev command (watches for changes by default, use `--once` for a single sync):
+### 3. Run the dev server
 
 ```bash
 npx @avvos/convoy dev
 ```
 
-Other package managers:
+This:
 
-```bash
-pnpm dlx @avvos/convoy dev
-yarn dlx @avvos/convoy dev
-bunx @avvos/convoy dev
-```
+- Creates tables and indexes in Postgres
+- Generates typed client APIs
+- Starts the HTTP + SSE server
 
-For local development of this repo, use `npm run convoy:dev` or `bun run convoy:dev` (bunx installs from the registry unless you add a local `file:` dependency).
+### 4. Use typed React hooks
 
-Convoy reads `DATABASE_URL` from `process.env`. If you install `dotenv`, the CLI will also load `.env` files automatically; otherwise set env vars yourself.
-
-This will:
-
-- create the database if needed
-- create tables + JSONB indexes
-- generate `convoy/_generated/api.ts`, `convoy/_generated/functions.ts`, and `convoy/_generated/server.ts`
-- generate `convoy/_generated/http.ts` (HTTP + SSE subscriptions)
-- start the local Convoy HTTP server
-
-If `convoy/server.ts` exists, its `createContext(req, base)` (and optional `configureServer`) is used automatically.
-
-Production workflow (explicit, safe):
-
-```bash
-convoy migrate
-```
-
-`convoy migrate` runs schema sync once, emits warnings for destructive or incompatible changes, and never drops tables or indexes. Use this in deploy pipelines (alias: `convoy deploy`).
-
-### 4) Use it on the client (React)
-
-```ts
-import { skipToken, useMutation, useQuery } from '@avvos/convoy/react';
+```tsx
+import { useQuery, useMutation, skipToken } from '@avvos/convoy/react';
 import { api } from '../convoy/_generated/api';
 
-const createProject = useMutation(api.projects.createProject);
-const { data, connectionState, isReconnecting, isStale } = useQuery(api.projects.listProjects, { userId });
-const { data: tasks } = useQuery(api.tasks.listTasks, projectId ? { projectId } : skipToken);
+function ProjectList({ userId }) {
+  const { data: projects, isLoading } = useQuery(api.projects.listProjects, { userId });
+  const createProject = useMutation(api.projects.createProject);
+
+  // UI updates automatically when data changes—no refetch needed
+}
 ```
 
-Direct client usage (non-React)
+That's it. End-to-end type safety. Reactive updates. On your own Postgres.
+
+---
+
+## Why Postgres JSONB?
+
+Postgres JSONB gives you the best of both worlds:
+
+| Schemaless Benefits      | Postgres Benefits                     |
+| ------------------------ | ------------------------------------- |
+| No upfront schema design | ACID transactions                     |
+| Add fields anytime       | Battle-tested reliability             |
+| Fast iteration           | Already deployed everywhere           |
+| No migrations during dev | Rich ecosystem (Supabase, Neon, etc.) |
+
+**And when you're ready to graduate:**
+
+Your data is already in Postgres. Add proper tables, foreign keys, and migrations using standard tools (Drizzle, Prisma, raw SQL). Convoy never locks you in—it's designed for you to lock _out_.
+
+---
+
+## The Graduation Path
+
+**Day 1: Validate fast**
 
 ```ts
-import { createConvoyClient } from '@avvos/convoy/client';
-import { api } from '../convoy/_generated/api';
-
-const client = createConvoyClient();
-await client.mutation(api.projects.createProject, { userId, name: 'My App' });
+// JSONB document - flexible, no schema commitment
+defineTable({
+  name: z.string(),
+  settings: z.object({}).passthrough(), // throw anything in here
+  createdAt: z.number(),
+});
 ```
 
-Structured errors and mutation state:
+**Day 30: You have users, things are working**
+
+```ts
+// Tighten the schema
+defineTable({
+  name: z.string(),
+  settings: z.object({
+    theme: z.enum(['light', 'dark']),
+    notifications: z.boolean(),
+  }),
+  createdAt: z.number(),
+});
+```
+
+**Day 90: You need real data integrity**
+
+```sql
+-- Graduate to relational tables
+-- Your data is already in Postgres—just transform it
+ALTER TABLE projects ADD COLUMN user_id UUID REFERENCES users(id);
+UPDATE projects SET user_id = (data->>'userId')::uuid;
+```
+
+Convoy gets out of your way. Your data, your database, your choice.
+
+---
+
+## Features
+
+### Reactive Queries
+
+Queries automatically update when data changes. No manual refetching.
+
+```tsx
+const { data, isLoading, isStale, connectionState } = useQuery(api.projects.list, { userId });
+// data updates automatically when any mutation affects this query
+```
+
+### End-to-End Type Safety
+
+Schema → Server → Client. No manual type definitions.
+
+```ts
+// Type errors if you pass wrong args
+const project = await client.mutation(api.projects.create, {
+  userId: 'users:abc123', // ✅ typed as Id<'users'>
+  name: 'My Project', // ✅ typed as string
+});
+```
+
+### Structured Errors
 
 ```ts
 import { ConvoyError } from '@avvos/convoy/client';
-import { useMutationState } from '@avvos/convoy/react';
-
-const { mutate, isLoading, error } = useMutationState(api.projects.createProject);
 
 try {
-  await mutate({ userId, name: 'My App' });
+  await mutate({ name: '' });
 } catch (err) {
   if (err instanceof ConvoyError) {
-    console.log(err.code, err.message);
+    console.log(err.code); // 'INVALID_ARGS' | 'UNAUTHORIZED' | ...
+    console.log(err.message); // Human-readable message
   }
 }
 ```
 
----
-
-## Auth via request context
-
-Convoy treats auth as **request-scoped data on your context**. Export `createContext(req, base)` from `convoy/server.ts` and `convoy dev` will pick it up automatically.
-
-If you build a custom server entry, use `createBaseContext(db)` to assemble the base context and then extend it in your request context.
+### Bring Your Own Auth
 
 ```ts
 // convoy/server.ts
-import type { IncomingMessage } from 'node:http';
-import type { ServerContext } from './_generated/server';
-import { convoyError } from '@avvos/convoy';
-
-export async function createContext(req: IncomingMessage, base: ServerContext) {
+export async function createContext(req, base) {
   const token = req.headers.authorization?.replace(/^Bearer /, '');
-  if (!token) {
-    throw convoyError('UNAUTHORIZED', 'Missing token');
-  }
   const user = await verifyJwt(token);
   return { ...base, auth: { userId: user.sub } };
 }
 ```
 
-Cookie session example:
+### Escape Hatches
+
+**Raw SQL when you need it:**
 
 ```ts
-export async function createContext(req: IncomingMessage, base: ServerContext) {
-  const cookie = req.headers.cookie ?? '';
-  const sessionId = cookie.split('session=')[1]?.split(';')[0];
-  if (!sessionId) {
-    throw convoyError('UNAUTHORIZED', 'Missing session');
-  }
-  const session = await loadSession(sessionId);
-  return { ...base, auth: { userId: session.userId } };
-}
+const rows = await ctx.db.raw<{ count: number }>(sql`
+  SELECT COUNT(*) as count FROM projects WHERE status = 'active'
+`);
 ```
 
-Optional server hook:
+**Unmanaged tables for existing data:**
 
 ```ts
-export function configureServer({ server }) {
-  server.on('request', (_req, _res) => {
-    // add custom logging or headers
-  });
-}
+defineTable({ event: z.string() }).unmanaged();
 ```
 
-Best DX pattern (recommended):
-
-1. Default: generated server entry (zero config). CLI generates `convoy/_generated/http.ts` with `createBaseContext(db)` wired in, and `npx @avvos/convoy dev` just works.
-2. Optional: user-defined server entry (advanced). Create `convoy/server.ts` and export `createContext(req, base)` (and optionally `configureServer`); the CLI auto-detects it and uses it.
-
-Best practices:
-
-- Resolve auth once per request (or once per SSE subscription connection) and attach it to context.
-- Throw `convoyError('UNAUTHORIZED', ...)` or `convoyError('FORBIDDEN', ...)` to return structured errors.
-- If you use header-based auth, note that SSE cannot send custom headers; prefer cookie sessions or set `subscribe: false`.
-- Bring your own auth — Convoy does not require a hosted auth provider.
-
-Typed auth helpers:
+**Mix with existing backends:**
 
 ```ts
-// convoy/functions/_auth.ts
-import { convoyError, createFunctionHelpers, type Id } from '@avvos/convoy';
-import type { ServerContext } from '../_generated/server';
-
-export type AuthContext = ServerContext & { auth: { userId: Id<'users'> } | null };
-
-const helpers = createFunctionHelpers<AuthContext>();
-export const authQuery = helpers.query;
-export const authMutation = helpers.mutation;
-
-export function requireAuth(ctx: AuthContext) {
-  if (!ctx.auth?.userId) {
-    throw convoyError('UNAUTHORIZED', 'Missing session');
-  }
-  return ctx.auth;
-}
+// Call your REST API from a mutation
+const result = await fetch('https://api.stripe.com/...');
 ```
 
 ---
 
-### How reactivity works (high level)
+## Self-Hosting
 
-1. useQuery opens an SSE subscription
-2. The server runs the query and streams the initial result
-3. A mutation runs and writes to Postgres
-4. Postgres emits NOTIFY
-5. The server refreshes affected subscriptions
-6. Updated query results are pushed to clients
+Convoy runs on any server with Node.js and Postgres.
 
-The server is always the source of truth.
+```bash
+# Set your database URL
+export DATABASE_URL="postgresql://user:pass@localhost:5432/myapp"
 
-### Escape hatches
-
-Raw SQL:
-
-```ts
-import { sql } from 'drizzle-orm';
-
-const rows = await ctx.db.raw<{ total: number }>(sql`select count(*) as total from users`);
+# Run the server
+npx @avvos/convoy dev
 ```
 
-Opt out of table management:
+**Production:**
 
-```ts
-import { defineSchema, defineTable } from '@avvos/convoy';
-import { z } from 'zod';
+```bash
+# Sync schema (safe, non-destructive)
+npx @avvos/convoy migrate
 
-export default defineSchema({
-  audit_log: defineTable({ event: z.string() }).unmanaged(),
-});
+# Run your server however you want
+node convoy/_generated/http.js
 ```
 
-Mixing Convoy with traditional backends:
-
-- Use Convoy for realtime slices (collab, dashboards) while keeping REST/GraphQL for everything else.
-- Point both systems at the same database; Convoy never drops tables and only creates what it manages.
-- You can call existing services from Convoy functions (e.g. via HTTP or shared modules).
-
-Eject story:
-
-- Your data stays in Postgres; you can stop the Convoy server without losing any rows.
-- Queries and mutations are just TypeScript functions — move them into another backend or reuse them in APIs.
-- You can keep generated types (`convoy/_generated`) or replace them with your own client logic.
-
-### Roadmap (high level)
-
-Near-term (v1):
-
-- runtime hardening and reconnect guarantees
-- structured error handling
-- auth patterns via request context
-- clear dev vs deploy workflows
-- escape hatches (raw SQL, interop)
+Works with Railway, Fly.io, Docker, VPS—anywhere you can run Node.js.
 
 ---
 
-License
+## What Convoy Is / Is Not
+
+**Convoy is:**
+
+- A typed function runtime (query/mutation) on your Postgres
+- A reactive layer that keeps clients in sync
+- A fast iteration tool for validating ideas
+- A bridge from schemaless to relational
+
+**Convoy is not:**
+
+- A hosted backend (self-host it yourself)
+- A replacement for all backend code (mix it with REST/GraphQL)
+- A migration engine (it creates tables, doesn't drop them)
+- An auth provider (bring your own)
+
+---
+
+## Tradeoffs
+
+Be aware of these limitations:
+
+- **SSE only** — No WebSocket transport (works fine for web, less ideal for mobile)
+- **JSONB-first** — Not traditional relational tables (that's the point)
+- **Long-lived process** — Needs a server, not serverless-friendly
+- **Early stage** — APIs may change before v1.0
+
+---
+
+## Comparison
+
+|                    | Convoy  | Firebase | Convex  | Supabase              |
+| ------------------ | ------- | -------- | ------- | --------------------- |
+| Self-hosted        | ✅ Easy | ❌       | ⚠️ Hard | ✅                    |
+| Schemaless start   | ✅      | ✅       | ✅      | ❌                    |
+| Path to relational | ✅      | ❌       | ❌      | ✅ Already relational |
+| Reactive queries   | ✅      | ✅       | ✅      | ⚠️ Realtime channels  |
+| Typed hooks        | ✅      | ❌       | ✅      | ❌                    |
+| Own your data      | ✅      | ❌       | ⚠️      | ✅                    |
+
+---
+
+## Getting Started
+
+```bash
+# Install
+npm install @avvos/convoy zod
+
+# Create convoy/schema.ts and convoy/functions/*.ts
+
+# Run dev server
+npx @avvos/convoy dev
+```
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for how it works under the hood.
+
+---
+
+## Roadmap
+
+See [ROADMAP.md](./ROADMAP.md) for what's coming in v1.0:
+
+- `db.delete()` and transaction support
+- `create-convoy-app` CLI for instant setup
+- One-click deploy templates (Docker, Railway)
+- Graduation tooling (JSONB → relational)
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to set up the dev environment and submit PRs.
+
+---
+
+## License
 
 MIT
