@@ -1,0 +1,19 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true
+  },
+  "typescript.validate.enable": true,
+  "typescript.preferences.includePackageJsonAutoImports": "off",
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "files.associations": {
+    "template/**/*.ts": "plaintext",
+    "template/**/*.tsx": "plaintext"
+  }
+}

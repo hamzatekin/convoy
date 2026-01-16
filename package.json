@@ -12,7 +12,8 @@
     "url": "https://github.com/hamzatekin/convoy/issues"
   },
   "workspaces": [
-    "playground"
+    "playground",
+    "packages/create-convoy-app"
   ],
   "bin": {
     "convoy": "./bin/convoy.js"

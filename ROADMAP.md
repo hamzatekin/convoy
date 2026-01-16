@@ -33,13 +33,13 @@ The foundation is built and working:
 - [x] **`db.delete()`** — Complete CRUD operations ✅
 - [x] **Transaction support** — `ctx.db.transaction()` for atomic mutations ✅
 - [x] **One-click deploy** — Dockerfile + docker-compose.yml + Railway template ✅
-- [ ] **`create-convoy-app` CLI** — `npx create-convoy-app my-app` for instant setup
+- [x] **`create-convoy-app` CLI** — `npx create-convoy-app my-app` for instant setup ✅
 
 ### Developer Experience
 
 - [x] CLI progress indicators during generation ✅
 - [x] Better error messages for schema sync failures ✅
-- [ ] Hot reload improvements (faster watch cycles)
+- [x] Hot reload improvements (faster watch cycles) ✅
 
 ### Documentation
 

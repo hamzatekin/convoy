@@ -1,0 +1,33 @@
+{
+  "name": "create-convoy-app",
+  "version": "0.0.1",
+  "description": "Create a new Convoy app with a single command",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hamzatekin/convoy.git",
+    "directory": "packages/create-convoy-app"
+  },
+  "bin": {
+    "create-convoy-app": "./bin/create-convoy-app.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "template"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

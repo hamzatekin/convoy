@@ -238,6 +238,34 @@ export async function createContext(req, base) {
 }
 ```
 
+### Batch Operations
+
+```ts
+// Insert multiple rows in a single query
+const ids = await ctx.db.insertMany('users', [
+  { name: 'Ada', age: 32 },
+  { name: 'Bob', age: 25 },
+]);
+
+// Delete multiple rows in a single query
+const count = await ctx.db.deleteMany('users', ids);
+```
+
+### Transactions
+
+```ts
+await ctx.db.transaction(async (tx) => {
+  const id = await tx.insert('users', { name: 'Ada', age: 32 });
+  await tx.insert('projects', { userId: id, name: 'New Project' });
+});
+```
+
+### Query Pagination
+
+```ts
+const page = await ctx.db.query('users').order('desc', 'createdAt').limit(20).offset(40).collect();
+```
+
 ### Escape Hatches
 
 **Raw SQL when you need it:**
@@ -347,14 +375,26 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for how it works under the hood.
 
 ---
 
+## Documentation
+
+- [ROADMAP.md](./ROADMAP.md) — What's done and what's next
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — How it works under the hood
+- [deploy/DEPLOY.md](./deploy/DEPLOY.md) — Deployment guide (Docker, Railway, Fly.io)
+- [docs/AUTH.md](./docs/AUTH.md) — Auth integration examples (Better Auth, Lucia, Auth.js)
+- [docs/MIGRATION_FROM_CONVEX.md](./docs/MIGRATION_FROM_CONVEX.md) — Migrating from Convex
+
+---
+
 ## Roadmap
 
-See [ROADMAP.md](./ROADMAP.md) for what's coming in v1.0:
+**v1.0 (mostly complete):**
 
-- `db.delete()` and transaction support
-- `create-convoy-app` CLI for instant setup
-- One-click deploy templates (Docker, Railway)
-- Graduation tooling (JSONB → relational)
+- ✅ Full CRUD: `insert`, `get`, `patch`, `delete`, `query`
+- ✅ Batch operations: `insertMany`, `deleteMany`
+- ✅ Transactions: `db.transaction()`
+- ✅ Query pagination: `.limit()`, `.offset()`
+- ✅ One-click deploy (Docker, Railway)
+- [ ] `create-convoy-app` CLI for instant setup
 
 ---
 
