@@ -31,7 +31,8 @@ export default function ProjectsPanel({
   client,
   refreshProjects,
 }: ProjectsPanelProps) {
-  const [projectName, setProjectName] = useState('Launch roadmap');
+  const [showForm, setShowForm] = useState(false);
+  const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('active');
 
@@ -41,11 +42,9 @@ export default function ProjectsPanel({
   const canCreateProject = Boolean(hasSession && projectName.trim().length > 0);
 
   async function handleCreateProject() {
-    if (!hasSession) {
-      return;
-    }
+    if (!hasSession) return;
     setError(null);
-    setStatus('Creating project...');
+    setStatus('Creating board...');
     try {
       const id = await createProject({
         name: projectName.trim(),
@@ -54,12 +53,13 @@ export default function ProjectsPanel({
       });
       await refreshProjects();
       setSelectedProjectId(id);
-      setProjectName('New initiative');
+      setProjectName('');
       setProjectDescription('');
       setProjectStatus('active');
-      setStatus('Project created');
+      setShowForm(false);
+      setStatus('Board created');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Mutation failed';
+      const message = err instanceof Error ? err.message : 'Failed to create board';
       setError(message);
       setStatus(`Error: ${message}`);
     }
@@ -67,127 +67,168 @@ export default function ProjectsPanel({
 
   async function handleUpdateProjectStatus(projectId: Id<'projects'>, nextStatus: ProjectStatus) {
     setError(null);
-    setStatus('Updating project status...');
+    setStatus('Updating...');
     try {
       await updateProjectStatus({ projectId, status: nextStatus });
       await refreshProjects();
-      setStatus('Project status updated');
+      setStatus('Updated');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Mutation failed';
+      const message = err instanceof Error ? err.message : 'Failed to update';
       setError(message);
-      setStatus(`Error: ${message}`);
     }
   }
 
-  const statusStyles: Record<ProjectStatus, string> = {
-    planning: 'bg-amber-100 text-amber-900',
-    active: 'bg-emerald-100 text-emerald-900',
-    blocked: 'bg-rose-100 text-rose-900',
-    done: 'bg-slate-200 text-slate-800',
+  const statusConfig: Record<ProjectStatus, { bg: string; text: string; dot: string }> = {
+    planning: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+    active: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+    blocked: { bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-500' },
+    done: { bg: 'bg-slate-100', text: 'text-slate-600', dot: 'bg-slate-400' },
   };
 
   return (
     <section className="rounded-2xl bg-white/90 p-5 shadow-sm ring-1 ring-slate-200/70">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Boards</h2>
-          <p className="text-xs text-slate-500">Pick a board to view cards in realtime.</p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 text-lg shadow-md">
+            📋
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Boards</h2>
+            <p className="text-xs text-slate-500">
+              {projectsLoading ? 'Syncing...' : `${projects.length} board${projects.length !== 1 ? 's' : ''}`}
+            </p>
+          </div>
         </div>
-        <span className="text-xs text-slate-500">{projectsLoading ? 'Syncing...' : `${projects.length} board(s)`}</span>
-      </div>
-
-      {!hasSession ? (
-        <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-          Create a workspace user to start adding boards.
-        </div>
-      ) : null}
-
-      <div className="mt-4 space-y-3">
-        <input
-          className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-          value={projectName}
-          onChange={(event) => setProjectName(event.target.value)}
-          placeholder="Board name"
-        />
-        <input
-          className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-          value={projectDescription}
-          onChange={(event) => setProjectDescription(event.target.value)}
-          placeholder="Short description (optional)"
-        />
-        <div className="flex flex-wrap gap-2">
-          <select
-            className="flex-1 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-            value={projectStatus}
-            onChange={(event) => setProjectStatus(event.target.value as ProjectStatus)}
-          >
-            {PROJECT_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {value.replace('_', ' ')}
-              </option>
-            ))}
-          </select>
+        {hasSession && !showForm && (
           <button
-            onClick={handleCreateProject}
-            disabled={!canCreateProject}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-slate-400"
+            onClick={() => setShowForm(true)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow-sm transition hover:bg-slate-800"
           >
-            Add board
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
           </button>
-        </div>
+        )}
       </div>
 
-      <ul className="mt-5 space-y-3">
-        {projects.length === 0 ? (
-          <li className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-500">
-            No boards yet. Create one to get started.
-          </li>
-        ) : (
-          projects.map((project) => (
-            <li
-              key={project.id}
-              className={`rounded-xl border px-3 py-4 text-sm shadow-sm transition ${
-                project.id === selectedProjectId ? 'border-slate-900/80 bg-slate-900/5' : 'border-slate-200 bg-white'
-              }`}
+      {/* Add Form (Collapsible) */}
+      {hasSession && showForm && (
+        <div className="mt-4 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200/80">
+          <div className="space-y-3">
+            <input
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder="Board name"
+              autoFocus
+            />
+            <input
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              value={projectDescription}
+              onChange={(e) => setProjectDescription(e.target.value)}
+              placeholder="Description (optional)"
+            />
+            <select
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              value={projectStatus}
+              onChange={(e) => setProjectStatus(e.target.value as ProjectStatus)}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <button
-                    onClick={() => setSelectedProjectId(project.id)}
-                    className="text-left text-sm font-semibold text-slate-900"
+              {PROJECT_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCreateProject}
+                disabled={!canCreateProject}
+                className="flex-1 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                Create Board
+              </button>
+              <button
+                onClick={() => setShowForm(false)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!hasSession && (
+        <div className="mt-4 rounded-xl border-2 border-dashed border-slate-200 px-4 py-6 text-center">
+          <p className="text-sm text-slate-500">Create a workspace to start adding boards</p>
+        </div>
+      )}
+
+      {/* Board List */}
+      <div className="mt-4 space-y-2">
+        {projects.length === 0 && hasSession && !showForm ? (
+          <button
+            onClick={() => setShowForm(true)}
+            className="w-full rounded-xl border-2 border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            + Create your first board
+          </button>
+        ) : (
+          projects.map((project) => {
+            const isSelected = project.id === selectedProjectId;
+            const config = statusConfig[project.status];
+            return (
+              <button
+                key={project.id}
+                onClick={() => setSelectedProjectId(project.id)}
+                className={`group w-full rounded-xl p-4 text-left transition ${
+                  isSelected
+                    ? 'bg-slate-900 text-white shadow-lg'
+                    : 'bg-white ring-1 ring-slate-200/80 hover:ring-slate-300 hover:shadow-sm'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                      {project.name}
+                    </p>
+                    {project.description && (
+                      <p className={`mt-1 text-xs truncate ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                        {project.description}
+                      </p>
+                    )}
+                  </div>
+                  <div
+                    className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-semibold ${
+                      isSelected ? 'bg-white/20 text-white' : `${config.bg} ${config.text}`
+                    }`}
                   >
-                    {project.name}
-                  </button>
-                  {project.description ? <p className="text-xs text-slate-500">{project.description}</p> : null}
-                  <p className="text-[11px] font-mono text-slate-400">{project.id}</p>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-white' : config.dot}`} />
+                    {project.status}
+                  </div>
                 </div>
-                <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusStyles[project.status]}`}>
-                  {project.status.replace('_', ' ')}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  onClick={() => setSelectedProjectId(project.id)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300"
-                >
-                  View cards
-                </button>
-                <select
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                  value={project.status}
-                  onChange={(event) => handleUpdateProjectStatus(project.id, event.target.value as ProjectStatus)}
-                >
-                  {PROJECT_STATUSES.map((value) => (
-                    <option key={value} value={value}>
-                      {value.replace('_', ' ')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </li>
-          ))
+                {isSelected && (
+                  <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                    <select
+                      className="rounded-lg bg-white/20 px-2 py-1 text-xs text-white backdrop-blur-sm focus:outline-none"
+                      value={project.status}
+                      onChange={(e) => handleUpdateProjectStatus(project.id, e.target.value as ProjectStatus)}
+                    >
+                      {PROJECT_STATUSES.map((s) => (
+                        <option key={s} value={s} className="text-slate-900">
+                          {s.charAt(0).toUpperCase() + s.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </button>
+            );
+          })
         )}
-      </ul>
+      </div>
     </section>
   );
 }

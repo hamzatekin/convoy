@@ -5,17 +5,33 @@ import { createConvoyClient } from '@avvos/convoy/client';
 import { skipToken, useQuery } from '@avvos/convoy/react';
 import { api } from '../convoy/_generated/api.ts';
 import type { Doc } from '../convoy/_generated/dataModel';
+import OnboardingHero from './components/OnboardingHero';
 import SessionPanel from './components/SessionPanel';
 import ProjectsPanel from './components/ProjectsPanel';
 import TasksPanel from './components/TasksPanel';
 import StatusPanel from './components/StatusPanel';
 
 export default function App() {
-  const [sessionUserId, setSessionUserId] = useState<Id<'users'> | null>(null);
+  // Load session from localStorage on mount
+  const [sessionUserId, setSessionUserIdState] = useState<Id<'users'> | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const stored = localStorage.getItem('convoy_session');
+    return stored ? (stored as Id<'users'>) : null;
+  });
   const [selectedProjectId, setSelectedProjectId] = useState<Id<'projects'> | null>(null);
   const [status, setStatus] = useState('Idle');
   const [error, setError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'header' | 'cookie'>('cookie');
+
+  // Persist session to localStorage
+  const setSessionUserId = (id: Id<'users'> | null) => {
+    setSessionUserIdState(id);
+    if (id) {
+      localStorage.setItem('convoy_session', id);
+    } else {
+      localStorage.removeItem('convoy_session');
+    }
+  };
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -127,87 +143,102 @@ export default function App() {
           style={{ backgroundColor: 'rgb(var(--convoy-emerald) / 0.5)' }}
         />
       </div>
-      <div className="relative mx-auto flex max-w-6xl flex-col gap-8 px-6 py-10">
-        <header className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <span className="text-xs uppercase tracking-[0.25em] text-slate-500">Convoy playground</span>
-              <h1 className="mt-2 text-4xl font-semibold text-slate-900">Trello Lite Board</h1>
-              <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                Simple boards and cards with realtime updates powered by Convoy queries, mutations, and SSE refreshes.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200/80">
-                Boards: {projectsLoading ? 'syncing' : projectsData.length}
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200/80">
-                Cards: {tasksLoading ? 'syncing' : tasksData.length}
-              </span>
-            </div>
-          </div>
-        </header>
 
-        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          <aside className="space-y-6">
-            <SessionPanel
-              sessionUserId={sessionUserId}
-              setSessionUserId={setSessionUserId}
-              authStatus={authStatus}
-              setStatus={setStatus}
-              setError={setError}
-              client={client}
-              anonymousClient={anonymousClient}
-              authMode={authMode}
-              setAuthMode={setAuthMode}
-            />
-            <ProjectsPanel
-              hasSession={Boolean(sessionUserId)}
-              projects={projectsData}
-              projectsLoading={projectsLoading}
-              selectedProjectId={selectedProjectId}
-              setSelectedProjectId={setSelectedProjectId}
-              setStatus={setStatus}
-              setError={setError}
-              client={client}
-              refreshProjects={refetchProjects}
-            />
-          </aside>
-          <section className="space-y-6">
-            <TasksPanel
-              selectedProject={selectedProject}
-              selectedProjectId={selectedProjectId}
-              tasks={tasksData}
-              tasksLoading={tasksLoading}
-              setStatus={setStatus}
-              setError={setError}
-              hasSession={Boolean(sessionUserId)}
-              client={client}
-              refreshTasks={refetchTasks}
-            />
-            <StatusPanel
-              status={status}
-              error={combinedError}
-              streams={[
-                {
-                  label: 'Boards feed',
-                  state: projectsConnection,
-                  isReconnecting: projectsReconnecting,
-                  isStale: projectsStale,
-                },
-                {
-                  label: 'Cards feed',
-                  state: tasksConnection,
-                  isReconnecting: tasksReconnecting,
-                  isStale: tasksStale,
-                },
-              ]}
-              sqlStats={sqlStats ?? null}
-              sqlStatsLoading={statsLoading}
-              unmanagedTables={['audit_log']}
-            />
-          </section>
-        </div>
+      <div className="relative mx-auto flex max-w-6xl flex-col gap-8 px-6 py-10">
+        {/* Show onboarding hero when no session */}
+        {!sessionUserId ? (
+          <OnboardingHero
+            onUserCreated={(id) => setSessionUserId(id as Id<'users'>)}
+            setStatus={setStatus}
+            setError={setError}
+            client={anonymousClient}
+          />
+        ) : (
+          <>
+            {/* Header */}
+            <header className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <span className="text-xs uppercase tracking-[0.25em] text-slate-500">Convoy Playground</span>
+                  <h1 className="mt-2 text-3xl font-bold text-slate-900">Project Board</h1>
+                  <p className="mt-1 text-sm text-slate-600">Realtime boards and cards powered by Convoy</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200/80">
+                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    {projectsLoading ? 'Syncing' : `${projectsData.length} boards`}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200/80">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    {tasksLoading ? 'Syncing' : `${tasksData.length} cards`}
+                  </span>
+                </div>
+              </div>
+            </header>
+
+            {/* Main Content */}
+            <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
+              <aside className="space-y-6">
+                <SessionPanel
+                  sessionUserId={sessionUserId}
+                  setSessionUserId={setSessionUserId}
+                  authStatus={authStatus}
+                  setStatus={setStatus}
+                  setError={setError}
+                  client={client}
+                  anonymousClient={anonymousClient}
+                  authMode={authMode}
+                  setAuthMode={setAuthMode}
+                />
+                <ProjectsPanel
+                  hasSession={Boolean(sessionUserId)}
+                  projects={projectsData}
+                  projectsLoading={projectsLoading}
+                  selectedProjectId={selectedProjectId}
+                  setSelectedProjectId={setSelectedProjectId}
+                  setStatus={setStatus}
+                  setError={setError}
+                  client={client}
+                  refreshProjects={refetchProjects}
+                />
+              </aside>
+              <section className="space-y-6">
+                <TasksPanel
+                  selectedProject={selectedProject}
+                  selectedProjectId={selectedProjectId}
+                  tasks={tasksData}
+                  tasksLoading={tasksLoading}
+                  setStatus={setStatus}
+                  setError={setError}
+                  hasSession={Boolean(sessionUserId)}
+                  client={client}
+                  refreshTasks={refetchTasks}
+                />
+                <StatusPanel
+                  status={status}
+                  error={combinedError}
+                  streams={[
+                    {
+                      label: 'Boards feed',
+                      state: projectsConnection,
+                      isReconnecting: projectsReconnecting,
+                      isStale: projectsStale,
+                    },
+                    {
+                      label: 'Cards feed',
+                      state: tasksConnection,
+                      isReconnecting: tasksReconnecting,
+                      isStale: tasksStale,
+                    },
+                  ]}
+                  sqlStats={sqlStats ?? null}
+                  sqlStatsLoading={statsLoading}
+                  unmanagedTables={['audit_log']}
+                />
+              </section>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

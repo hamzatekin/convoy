@@ -2,6 +2,7 @@
 import { defineRef } from '../../../src/index.ts';
 import { z } from 'zod';
 import { authMutation, authQuery, requireAuth } from './_auth';
+import { query } from '@avvos/convoy';
 
 const ProjectStatus = z.enum(['planning', 'active', 'blocked', 'done']);
 
@@ -23,13 +24,13 @@ export const createProject = authMutation({
   },
 });
 
-export const listProjects = authQuery({
+export const listProjects = query({
   input: {},
   handler: async (ctx) => {
-    const auth = requireAuth(ctx);
+    const auth = requireAuth(ctx as any);
     return ctx.db
       .query('projects')
-      .withIndex('by_userId', (q) => q.eq('userId', auth.userId))
+      .withIndex('by_userId', (q: any) => q.eq('userId', auth.userId))
       .order('desc', 'createdAt')
       .collect();
   },

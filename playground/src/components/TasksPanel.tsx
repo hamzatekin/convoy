@@ -34,7 +34,8 @@ export default function TasksPanel({
   client,
   refreshTasks,
 }: TasksPanelProps) {
-  const [taskTitle, setTaskTitle] = useState('Write kickoff brief');
+  const [showForm, setShowForm] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
   const [taskPriority, setTaskPriority] = useState<TaskPriority>('medium');
   const [taskStatus, setTaskStatus] = useState<TaskStatus>('todo');
 
@@ -44,11 +45,9 @@ export default function TasksPanel({
   const canCreateTask = Boolean(hasSession && selectedProjectId && taskTitle.trim().length > 0);
 
   async function handleCreateTask() {
-    if (!selectedProjectId) {
-      return;
-    }
+    if (!selectedProjectId) return;
     setError(null);
-    setStatus('Creating task...');
+    setStatus('Creating card...');
     try {
       await createTask({
         projectId: selectedProjectId,
@@ -57,41 +56,38 @@ export default function TasksPanel({
         status: taskStatus,
       });
       await refreshTasks();
-      setTaskTitle('Next milestone');
+      setTaskTitle('');
       setTaskPriority('medium');
       setTaskStatus('todo');
-      setStatus('Task created');
+      setShowForm(false);
+      setStatus('Card created');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Mutation failed';
+      const message = err instanceof Error ? err.message : 'Failed to create card';
       setError(message);
-      setStatus(`Error: ${message}`);
     }
   }
 
   async function handleUpdateTaskStatus(taskId: Id<'tasks'>, nextStatus: TaskStatus) {
     setError(null);
-    setStatus('Updating task...');
     try {
       await updateTaskStatus({ taskId, status: nextStatus });
       await refreshTasks();
-      setStatus('Task updated');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Mutation failed';
+      const message = err instanceof Error ? err.message : 'Failed to update';
       setError(message);
-      setStatus(`Error: ${message}`);
     }
   }
 
-  const columns: Array<{ key: TaskStatus; label: string }> = [
-    { key: 'todo', label: 'To do' },
-    { key: 'in_progress', label: 'In progress' },
-    { key: 'done', label: 'Done' },
+  const columns: Array<{ key: TaskStatus; label: string; icon: string }> = [
+    { key: 'todo', label: 'To Do', icon: '○' },
+    { key: 'in_progress', label: 'In Progress', icon: '◐' },
+    { key: 'done', label: 'Done', icon: '●' },
   ];
 
-  const priorityStyles: Record<TaskPriority, string> = {
-    low: 'bg-slate-100 text-slate-600',
-    medium: 'bg-amber-100 text-amber-900',
-    high: 'bg-rose-100 text-rose-900',
+  const priorityConfig: Record<TaskPriority, { bg: string; text: string; label: string }> = {
+    low: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Low' },
+    medium: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Med' },
+    high: { bg: 'bg-rose-100', text: 'text-rose-700', label: 'High' },
   };
 
   const tasksByStatus = TASK_STATUSES.reduce(
@@ -104,112 +100,156 @@ export default function TasksPanel({
 
   return (
     <section className="space-y-4">
+      {/* Header */}
       <div className="rounded-2xl bg-white/90 p-5 shadow-sm ring-1 ring-slate-200/70">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Cards</h2>
-            <p className="text-xs text-slate-500">
-              {selectedProject ? (
-                <>
-                  Viewing <span className="font-semibold text-slate-700">{selectedProject.name}</span>
-                </>
-              ) : (
-                'Select a board to view cards.'
-              )}
-            </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-lg shadow-md">
+              ✓
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Cards</h2>
+              <p className="text-xs text-slate-500">
+                {selectedProject ? (
+                  <>
+                    Viewing <span className="font-medium text-slate-700">{selectedProject.name}</span>
+                  </>
+                ) : (
+                  'Select a board to view cards'
+                )}
+              </p>
+            </div>
           </div>
-          <span className="text-xs text-slate-500">{tasksLoading ? 'Syncing...' : `${tasks.length} card(s)`}</span>
+          <div className="flex items-center gap-3">
+            {tasksLoading && (
+              <span className="flex items-center gap-2 text-xs text-slate-500">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+                Syncing
+              </span>
+            )}
+            {selectedProjectId && hasSession && !showForm && (
+              <button
+                onClick={() => setShowForm(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow-sm transition hover:bg-slate-800"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-[1.6fr_0.8fr_0.9fr_auto]">
-          <input
-            className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-            value={taskTitle}
-            onChange={(event) => setTaskTitle(event.target.value)}
-            placeholder="Card title"
-          />
-          <select
-            className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-            value={taskPriority}
-            onChange={(event) => setTaskPriority(event.target.value as TaskPriority)}
-          >
-            {TASK_PRIORITIES.map((value) => (
-              <option key={value} value={value}>
-                Priority: {value}
-              </option>
-            ))}
-          </select>
-          <select
-            className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-            value={taskStatus}
-            onChange={(event) => setTaskStatus(event.target.value as TaskStatus)}
-          >
-            {TASK_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                Column: {value.replace('_', ' ')}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={handleCreateTask}
-            disabled={!canCreateTask}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            Add card
-          </button>
-        </div>
+        {/* Add Card Form */}
+        {showForm && selectedProjectId && (
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200/80">
+            <div className="space-y-3">
+              <input
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
+                placeholder="Card title"
+                autoFocus
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm focus:border-slate-400 focus:outline-none"
+                  value={taskPriority}
+                  onChange={(e) => setTaskPriority(e.target.value as TaskPriority)}
+                >
+                  {TASK_PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      Priority: {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm focus:border-slate-400 focus:outline-none"
+                  value={taskStatus}
+                  onChange={(e) => setTaskStatus(e.target.value as TaskStatus)}
+                >
+                  {TASK_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      Column: {s.replace('_', ' ')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateTask}
+                  disabled={!canCreateTask}
+                  className="flex-1 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  Add Card
+                </button>
+                <button
+                  onClick={() => setShowForm(false)}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Kanban Columns */}
       <div className="grid gap-4 lg:grid-cols-3">
         {columns.map((column) => {
           const columnTasks = tasksByStatus[column.key] ?? [];
           return (
             <div key={column.key} className="rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-200/70">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">{column.label}</h3>
-                <span className="text-xs text-slate-500">{columnTasks.length}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">{column.icon}</span>
+                  <h3 className="text-sm font-semibold text-slate-800">{column.label}</h3>
+                </div>
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
+                  {columnTasks.length}
+                </span>
               </div>
-              <div className="mt-3 space-y-3">
+
+              <div className="mt-3 space-y-2">
                 {!selectedProjectId ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500">
-                    Select a board to see cards.
+                  <div className="rounded-xl border-2 border-dashed border-slate-200 px-4 py-8 text-center text-xs text-slate-400">
+                    Select a board
                   </div>
                 ) : columnTasks.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500">
-                    No cards here yet.
+                  <div className="rounded-xl border-2 border-dashed border-slate-200 px-4 py-8 text-center text-xs text-slate-400">
+                    No cards
                   </div>
                 ) : (
-                  columnTasks.map((task) => (
-                    <div key={task.id} className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{task.title}</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <span
-                              className={`rounded-full px-2 py-1 text-[10px] font-semibold ${priorityStyles[task.priority]}`}
-                            >
-                              {task.priority}
-                            </span>
-                            <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                              {task.status.replace('_', ' ')}
-                            </span>
-                          </div>
+                  columnTasks.map((task) => {
+                    const priority = priorityConfig[task.priority];
+                    return (
+                      <div
+                        key={task.id}
+                        className="group rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200/70 transition hover:shadow-md hover:ring-slate-300"
+                      >
+                        <p className="font-medium text-slate-900">{task.title}</p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${priority.bg} ${priority.text}`}
+                          >
+                            {priority.label}
+                          </span>
+                          <select
+                            className="rounded-lg border-0 bg-transparent py-1 pr-6 text-xs text-slate-500 opacity-0 transition group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-0"
+                            value={task.status}
+                            onChange={(e) => handleUpdateTaskStatus(task.id, e.target.value as TaskStatus)}
+                          >
+                            {TASK_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                → {s.replace('_', ' ')}
+                              </option>
+                            ))}
+                          </select>
                         </div>
-                        <select
-                          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                          value={task.status}
-                          onChange={(event) => handleUpdateTaskStatus(task.id, event.target.value as TaskStatus)}
-                        >
-                          {TASK_STATUSES.map((value) => (
-                            <option key={value} value={value}>
-                              Move to {value.replace('_', ' ')}
-                            </option>
-                          ))}
-                        </select>
                       </div>
-                      <p className="mt-2 text-[10px] font-mono text-slate-400">{task.id}</p>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
